@@ -1,4 +1,4 @@
-# Design System - Tempo Inbox
+# Design System - Autopilot-AI
 
 ## Product Context
 - **What this is:** A productivity command center that turns email and calendar signals into a clean daily action plan.
@@ -51,4 +51,7 @@
 |------|----------|-----------|
 | 2026-04-16 | Build v1 as mock-backed local app | User explicitly asked not to connect Supabase, Google, accounts, or pricing yet. |
 | 2026-04-16 | Keep email intelligence in pure TypeScript functions | Future integrations can replace data sources without rewriting React components. |
-| 2026-04-16 | Implement idea-improver output as a visible improvement studio | The returned ideas overlap heavily, so a typed matrix covers both 75-item passes while keeping the app understandable and testable. |
+| 2026-04-16 | Ship the extra workflow work as an action lab | The app should expose usable behaviors like apply, undo, snooze, share, sync, and save instead of showing internal planning notes. |
+| 2026-04-17 | Simplify the visual system | The action lab is flatter, labels are shorter, shadows are quieter, and the page reads more like a focused work surface than a control matrix. |
+| 2026-04-17 | Add a familiar calendar day view | The integrated calendar now uses a week strip, hourly grid, and color-coded event blocks so it feels closer to Google Calendar while staying visually aligned with the app. |
+| 2026-04-17 | Add productivity controls above integrations | Focus sprints, quick capture, and planning modes are placed near the daily call because they directly change what the user does next. |

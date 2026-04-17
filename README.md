@@ -1,6 +1,6 @@
-# Tempo Inbox
+# Autopilot-AI
 
-Tempo Inbox is a mock-backed productivity app that turns email and calendar signals into a daily action plan. It now includes two idea-improver passes that track 150 generated improvements in the visible product surface.
+Autopilot-AI is a mock-backed productivity app that turns email and calendar signals into a daily action plan. The prototype includes usable workflow controls for one-click recommendations, cross-device queueing, snooze controls, shareable state, batch actions with undo, inline edit review, role-aware defaults, contextual guidance, and saved presets.
 
 This first version includes the integration shell for Supabase OAuth, Google, Slack, WhatsApp, Microsoft 365, and Notion. Google and Slack sign-in buttons become live after Supabase env vars and provider credentials are configured. WhatsApp, Microsoft 365 message access, Slack message access, and Notion content access are intentionally marked server-required because their long-lived tokens must not live in a browser bundle.
 
@@ -30,12 +30,12 @@ Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for the shortest path. The min
 ## What Is In V1
 
 - Email-derived action list with priority, confidence, source, and risk signals.
-- Calendar-aware daily schedule with meetings and protected focus windows.
+- Google Calendar-style day view with a week strip, hourly grid, event blocks, meetings, and protected focus windows.
+- Productivity cockpit for focus sprints, quick-captured tasks, and planning modes for impact, quick wins, or deep work.
 - Triage filters for all tasks, urgent tasks, waiting tasks, and done tasks.
 - Integration readiness for Google, Slack, WhatsApp, Microsoft 365, and Notion.
-- A 150-item improvement studio covering recommendations, cross-device continuity, event triggers, shareable state, accessibility, multi-select actions, contextual hints, role-aware defaults, inline editing, and saved presets.
-- AI saturation tracking: the second successful 75-idea pass repeated the first 75 titles, so the app surfaces that as a 100% saturation signal instead of hiding the repetition.
-- Improvement ideas already folded into the product: source explainability, privacy boundary messaging, effort/impact scoring, and a recovery plan for missed work.
+- An action lab covering recommendations, cross-device continuity, event triggers, shareable state, accessibility, multi-select actions, contextual hints, role-aware defaults, inline editing, and saved presets.
+- Source explainability, privacy boundary messaging, effort/impact scoring, and a recovery plan for missed work are built into the daily plan.
 
 ## Deferred
 

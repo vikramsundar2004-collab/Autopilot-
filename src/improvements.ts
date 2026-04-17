@@ -65,7 +65,7 @@ export const themeLabels: Record<ImprovementTheme, string> = {
   templates: "Templates",
   onboarding: "Onboarding",
   workspace: "Workspace",
-  checklist: "Checklist",
+  checklist: "Steps",
   dashboard: "Dashboard",
   assistant: "Assistant",
   history: "History",
