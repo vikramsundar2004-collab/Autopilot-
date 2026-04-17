@@ -37,7 +37,7 @@ Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md), [docs/SUPABASE_SETUP.md](docs
 2. Fill `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_APP_URL`.
 3. Run `supabase/schema.sql` in the Supabase SQL editor.
 4. Configure Google and Slack OIDC providers in Supabase Auth.
-5. Deploy the `sync-google-workspace` and `plan-day` Supabase Edge Functions, then set the `OPENAI_API_KEY` function secret.
+5. Deploy the `store-google-connection`, `sync-google-workspace`, and `plan-day` Supabase Edge Functions, then set the Google, encryption, and OpenAI function secrets.
 6. Restart `npm run dev`.
 
 ## What Is In V1
@@ -48,13 +48,15 @@ Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md), [docs/SUPABASE_SETUP.md](docs
 - Productivity cockpit for focus sprints, quick-captured tasks, and planning modes for impact, quick wins, or deep work.
 - Customize panel for visual theme, density, visible workspace sections, productivity defaults, and calendar preferences.
 - First-run tutorial with skip, completion, and replay controls.
+- First-run login gate with Google OAuth and email magic-link sign-in.
 - Triage filters for all tasks, urgent tasks, waiting tasks, and done tasks.
 - Integration readiness for Google, Slack, WhatsApp, Microsoft 365, and Notion.
+- Shift-style workspace customization for sidebar style, pinned pages, and moveable page order.
 - An action lab covering recommendations, cross-device continuity, event triggers, shareable state, accessibility, multi-select actions, contextual hints, role-aware defaults, inline editing, and saved presets.
 - Premium value page covering executive briefs, work graph, AI citations, protected focus scheduling, delegation, approval-gated automation, security controls, personalization, and ROI reporting.
 - Source explainability, privacy boundary messaging, effort/impact scoring, and a recovery plan for missed work are built into the daily plan.
 - Supabase Edge Function API for authenticated daily planning, OpenAI-backed action extraction, deterministic fallback planning, schedule block persistence, approval requests, audit events, usage events, and enterprise policies.
-- Google Workspace sync API for short-lived-session Gmail metadata and Calendar event ingestion into Supabase.
+- Encrypted Google token vault plus Workspace sync API for Gmail metadata and Calendar event ingestion into Supabase.
 
 ## Deferred
 

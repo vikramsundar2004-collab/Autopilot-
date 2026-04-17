@@ -46,6 +46,7 @@ This creates:
 - `profiles`
 - `user_settings`
 - `connected_accounts`
+- `provider_token_vault`
 - `action_items`
 - `organizations`
 - `organization_memberships`
@@ -68,15 +69,21 @@ Install the Supabase CLI, then run:
 ```bash
 supabase login
 supabase link --project-ref qwktgunwrasxthmssnxk
+supabase secrets set TOKEN_ENCRYPTION_KEY=GENERATE_A_32_PLUS_CHARACTER_RANDOM_SECRET
+supabase secrets set GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
+supabase secrets set GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
 supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 supabase secrets set OPENAI_PLANNER_MODEL=gpt-5-mini
+supabase functions deploy store-google-connection
 supabase functions deploy sync-google-workspace
 supabase functions deploy plan-day
 ```
 
 The `OPENAI_API_KEY` secret stays inside Supabase Edge Functions. Do not add it as a `VITE_` browser variable.
 
-The app's Sources page has a `Sync Google data` button. It calls `sync-google-workspace` to store recent Gmail and today's Calendar rows.
+The first Google OAuth callback calls `store-google-connection`, which saves an encrypted token connection server-side. Users should not have to reconnect every time.
+
+The app's Sources page has a `Sync Google data` button. It calls `sync-google-workspace` to store recent Gmail and today's Calendar rows using the saved Google connection.
 
 The app's Productivity page has a `Run AI planning API` button. It calls `plan-day` and shows the created action, schedule block, and approval counts.
 
@@ -139,11 +146,11 @@ To test the API path:
 5. Click `Run AI planning API`.
 6. Expect a notice with the plan source and persisted counts.
 
-If Google does not return a provider token, reconnect Google and keep `prompt=consent` in the OAuth query params. The current sync uses the active session token and does not persist refresh tokens yet.
+If Google does not return a refresh token, remove Autopilot-AI access from your Google account and connect again. Google usually only returns a refresh token on the first consent grant.
 
 ## 7. Next Backend Work
 
 - Persist customization settings from `localStorage` into `user_settings`.
 - Store connected-account metadata in `connected_accounts`.
-- Add server-side token vaulting before background provider ingestion.
+- Add scheduled background sync from the saved Google refresh token.
 - Add edge functions or API routes for Slack message sync, WhatsApp webhooks, Microsoft Graph, and Notion.

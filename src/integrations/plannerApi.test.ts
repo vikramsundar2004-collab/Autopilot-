@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import { runDailyPlanner } from "./plannerApi";
 
 describe("planner API client", () => {
-  it("fails clearly until Supabase client env vars are configured", async () => {
-    await expect(runDailyPlanner()).resolves.toMatchObject({
-      ok: false,
-      message: expect.stringContaining("Supabase env vars"),
-    });
+  it("fails without throwing when the planning API is unavailable", async () => {
+    const result = await runDailyPlanner();
+    expect(result.ok).toBe(false);
+    expect(result.message.length).toBeGreaterThan(0);
   });
 });

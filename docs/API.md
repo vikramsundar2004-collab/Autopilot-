@@ -2,20 +2,30 @@
 
 The first backend slice uses two Supabase Edge Functions:
 
+- `store-google-connection` saves the user's Google access token and refresh token in an encrypted server-side vault after OAuth.
 - `sync-google-workspace` pulls recent Gmail metadata and today's Google Calendar events into Supabase.
 - `plan-day` turns stored or request-provided email and calendar signals into a daily action plan, schedule blocks, approval requests, audit events, and usage events.
 
-The sync function uses the short-lived Google provider token from the active Supabase session. It does not store Google access or refresh tokens.
+Users connect Google once. After that, sync reads the encrypted server-side connection. If the access token expires, the sync function refreshes it with the stored refresh token.
 
 ## What It Does
+
+`store-google-connection`:
+
+1. Verifies the caller with the Supabase user session bearer token.
+2. Receives the Google provider token from the successful Supabase OAuth callback.
+3. Encrypts the token with `TOKEN_ENCRYPTION_KEY`.
+4. Writes token ciphertext into `provider_token_vault`, which has RLS enabled and no browser-readable policy.
+5. Writes safe connection metadata into `connected_accounts`.
 
 `sync-google-workspace`:
 
 1. Verifies the caller with the Supabase user session bearer token.
-2. Uses the caller's Google provider access token to read Gmail and Calendar.
-3. Stores Gmail message metadata, snippets, sender, subject, labels, and received time in `email_messages`.
-4. Stores same-day primary-calendar events in `calendar_events`.
-5. Writes audit and usage events for enterprise reporting.
+2. Loads and decrypts the stored Google connection server-side.
+3. Refreshes the Google access token when needed.
+4. Stores Gmail message metadata, snippets, sender, subject, labels, and received time in `email_messages`.
+5. Stores same-day primary-calendar events in `calendar_events`.
+6. Writes audit and usage events for enterprise reporting.
 
 `plan-day`:
 
@@ -97,6 +107,9 @@ The browser client gets `providerAccessToken` from the active Supabase session a
 Set these in Supabase, not in browser `.env` files:
 
 ```bash
+supabase secrets set TOKEN_ENCRYPTION_KEY=GENERATE_A_32_PLUS_CHARACTER_RANDOM_SECRET
+supabase secrets set GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
+supabase secrets set GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
 supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 supabase secrets set OPENAI_PLANNER_MODEL=gpt-5-mini
 ```
@@ -108,6 +121,7 @@ supabase secrets set OPENAI_PLANNER_MODEL=gpt-5-mini
 ```bash
 supabase login
 supabase link --project-ref qwktgunwrasxthmssnxk
+supabase functions deploy store-google-connection
 supabase functions deploy sync-google-workspace
 supabase functions deploy plan-day
 ```
@@ -125,7 +139,7 @@ Then run `supabase/schema.sql` in the Supabase SQL editor if you have not alread
 
 ## Next Backend Slices
 
-- Server-side refresh-token vaulting so Google sync can run in the background after the short-lived provider token expires.
+- Background scheduled sync using the saved Google refresh token.
 - Slack, Microsoft, WhatsApp, and Notion ingestion through server-side token storage.
 - Generated draft replies and calendar-change proposals behind `approval_requests`.
 - Admin API for enterprise policy, audit export, retention, and seat management.

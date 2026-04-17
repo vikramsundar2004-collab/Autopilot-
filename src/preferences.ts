@@ -2,6 +2,16 @@ export type VisualTheme = "clean" | "contrast" | "green" | "blue";
 export type Density = "comfortable" | "compact" | "spacious";
 export type PlanMode = "impact" | "quickWins" | "deepWork";
 export type EventBlockSize = "compact" | "comfortable" | "large";
+export type SidebarStyle = "full" | "compact" | "minimal";
+export type WorkspacePageKey =
+  | "daily"
+  | "productivity"
+  | "sources"
+  | "actions"
+  | "customize"
+  | "calendar"
+  | "privacy"
+  | "premium";
 
 export interface WorkspaceSections {
   integrations: boolean;
@@ -22,12 +32,19 @@ export interface CalendarPreferences {
   eventSize: EventBlockSize;
 }
 
+export interface WorkspaceLayout {
+  sidebarStyle: SidebarStyle;
+  pageOrder: WorkspacePageKey[];
+  pinnedPages: WorkspacePageKey[];
+}
+
 export interface CustomizationSettings {
   visualTheme: VisualTheme;
   density: Density;
   sections: WorkspaceSections;
   productivity: ProductivityDefaults;
   calendar: CalendarPreferences;
+  layout: WorkspaceLayout;
 }
 
 export interface TutorialState {
@@ -38,6 +55,17 @@ export interface TutorialState {
 
 export const CUSTOMIZATION_STORAGE_KEY = "autopilot-ai-customization";
 export const TUTORIAL_STORAGE_KEY = "autopilot-ai-tutorial";
+
+export const defaultPageOrder: WorkspacePageKey[] = [
+  "daily",
+  "productivity",
+  "sources",
+  "actions",
+  "customize",
+  "calendar",
+  "privacy",
+  "premium",
+];
 
 export const defaultCustomizationSettings: CustomizationSettings = {
   visualTheme: "clean",
@@ -57,6 +85,11 @@ export const defaultCustomizationSettings: CustomizationSettings = {
     endHour: 18,
     showAgenda: true,
     eventSize: "comfortable",
+  },
+  layout: {
+    sidebarStyle: "full",
+    pageOrder: defaultPageOrder,
+    pinnedPages: ["daily", "productivity"],
   },
 };
 
@@ -87,6 +120,7 @@ export function sanitizeCustomizationSettings(value: unknown): CustomizationSett
   const sections = isRecord(candidate.sections) ? candidate.sections : {};
   const productivity = isRecord(candidate.productivity) ? candidate.productivity : {};
   const calendar = isRecord(candidate.calendar) ? candidate.calendar : {};
+  const layout = isRecord(candidate.layout) ? candidate.layout : {};
   const startHour = clampNumber(calendar.startHour, 5, 22, defaultCustomizationSettings.calendar.startHour);
   const endHour = Math.max(
     startHour + 1,
@@ -132,6 +166,15 @@ export function sanitizeCustomizationSettings(value: unknown): CustomizationSett
         ["compact", "comfortable", "large"],
         defaultCustomizationSettings.calendar.eventSize,
       ),
+    },
+    layout: {
+      sidebarStyle: pickString(
+        layout.sidebarStyle,
+        ["full", "compact", "minimal"],
+        defaultCustomizationSettings.layout.sidebarStyle,
+      ),
+      pageOrder: sanitizePageOrder(layout.pageOrder),
+      pinnedPages: sanitizePinnedPages(layout.pinnedPages),
     },
   };
 }
@@ -183,6 +226,20 @@ function pickString<T extends string>(
 
 function pickBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function sanitizePageOrder(value: unknown): WorkspacePageKey[] {
+  const order = Array.isArray(value) ? Array.from(new Set(value.filter(isWorkspacePageKey))) : [];
+  return [...order, ...defaultPageOrder.filter((page) => !order.includes(page))];
+}
+
+function sanitizePinnedPages(value: unknown): WorkspacePageKey[] {
+  const pinned = Array.isArray(value) ? value.filter(isWorkspacePageKey) : [];
+  return Array.from(new Set(pinned)).slice(0, 4);
+}
+
+function isWorkspacePageKey(value: unknown): value is WorkspacePageKey {
+  return typeof value === "string" && defaultPageOrder.includes(value as WorkspacePageKey);
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {

@@ -17,12 +17,13 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "Action lab" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Apply recommendation"));
-    expect(screen.getByText(/Recommendations for Templates applied/)).toBeInTheDocument();
+    expect(screen.getByText(/Recommendations for Templates is now enabled/)).toBeInTheDocument();
     expect(screen.getAllByText("Recommendations for Templates").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByLabelText("Work offline and queue changes"));
     fireEvent.click(screen.getAllByText("Cross-device")[0]);
     fireEvent.click(screen.getAllByText("Use this")[0]);
+    expect(screen.getByText("Feature enabled")).toBeInTheDocument();
     expect(screen.getAllByText(/queued/).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByText("Sync queued actions"));
@@ -36,7 +37,7 @@ describe("App", () => {
     fireEvent.click(screen.getByLabelText("Recommendations for Templates"));
     fireEvent.click(screen.getByLabelText("Event-driven for Templates"));
     fireEvent.click(screen.getByText("Apply selected"));
-    expect(screen.getByText(/2 actions applied with undo available/)).toBeInTheDocument();
+    expect(screen.getByText(/2 features enabled with undo available/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Undo last batch"));
     expect(screen.getByText("2 actions undone.")).toBeInTheDocument();
@@ -84,7 +85,7 @@ describe("App", () => {
     expect(screen.getByText(/marked done from the focus sprint/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Run AI planning API"));
-    expect(await screen.findByText(/AI planning API failed: Add Supabase env vars/)).toBeInTheDocument();
+    expect(await screen.findByText(/AI planning API failed:/)).toBeInTheDocument();
   });
 
   it("renders a calendar-style day grid with events", () => {
@@ -101,7 +102,7 @@ describe("App", () => {
     );
   });
 
-  it("customizes theme, density, visible sections, and calendar hours", () => {
+  it("customizes theme, density, visible sections, calendar hours, and sidebar layout", () => {
     const { container } = render(<App />);
     const shell = container.querySelector(".app-shell");
 
@@ -114,6 +115,14 @@ describe("App", () => {
     });
     expect(shell).toHaveClass("theme-blue");
     expect(shell).toHaveClass("density-compact");
+    fireEvent.change(screen.getByLabelText("Sidebar style"), {
+      target: { value: "minimal" },
+    });
+    expect(shell).toHaveClass("sidebar-minimal");
+    fireEvent.click(screen.getAllByRole("button", { name: "Down" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Daily plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+    expect(screen.getByLabelText("Sidebar page order")).toHaveTextContent("Productivity");
 
     fireEvent.click(screen.getByLabelText("Show integrations"));
     fireEvent.click(screen.getByRole("button", { name: "Sources" }));

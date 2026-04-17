@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
   ArrowRight,
@@ -39,16 +40,25 @@ import {
   formatTime,
   summarizePlan,
 } from "./intelligence";
-import { completeOAuthRedirect, startIntegrationConnection } from "./integrations/auth";
+import {
+  completeOAuthRedirect,
+  signOut,
+  startEmailLogin,
+  startGoogleLogin,
+  startIntegrationConnection,
+} from "./integrations/auth";
 import { runDailyPlanner } from "./integrations/plannerApi";
-import { syncGoogleWorkspace } from "./integrations/workspaceSyncApi";
+import {
+  getGoogleWorkspaceConnectionStatus,
+  syncGoogleWorkspace,
+} from "./integrations/workspaceSyncApi";
 import {
   getConnectionReadiness,
   integrationProviders,
   type IntegrationKey,
   type IntegrationProvider,
 } from "./integrations/providers";
-import { hasSupabaseConfig } from "./integrations/supabaseClient";
+import { hasSupabaseConfig, supabase } from "./integrations/supabaseClient";
 import {
   defaultCustomizationSettings,
   loadCustomizationSettings,
@@ -61,8 +71,10 @@ import {
   type Density,
   type EventBlockSize,
   type PlanMode,
+  type SidebarStyle,
   type TutorialState,
   type VisualTheme,
+  type WorkspacePageKey,
 } from "./preferences";
 import type { ActionItem, CalendarEvent, EmailPriority, TaskStatus } from "./types";
 
@@ -226,10 +238,20 @@ interface SavedPreset {
 }
 
 function App() {
+  const authRequired = hasSupabaseConfig && import.meta.env.MODE !== "test";
   const [initialState] = useState(() => ({
     settings: loadCustomizationSettings(),
     tutorial: loadTutorialState(),
   }));
+  const [authSession, setAuthSession] = useState<Session | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(!authRequired);
+  const [authNotice, setAuthNotice] = useState(
+    hasSupabaseConfig
+      ? "Use Google once to connect Gmail and Calendar."
+      : "Add Supabase env vars before testing login.",
+  );
+  const [loginEmail, setLoginEmail] = useState("");
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [settings, setSettings] = useState<CustomizationSettings>(initialState.settings);
   const [tutorialState, setTutorialState] = useState<TutorialState>(initialState.tutorial);
   const [isTutorialOpen, setIsTutorialOpen] = useState(
@@ -298,13 +320,53 @@ function App() {
     done: orderedTasks.filter((task) => task.status === "done").length,
   };
 
+  async function refreshGoogleConnectionStatus() {
+    const status = await getGoogleWorkspaceConnectionStatus();
+    setIsGoogleConnected(status.connected);
+  }
+
+  useEffect(() => {
+    if (!authRequired || !supabase) return undefined;
+
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      setAuthSession(data.session);
+      setIsAuthReady(true);
+      if (data.session) {
+        refreshGoogleConnectionStatus();
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthSession(session);
+      setIsAuthReady(true);
+      if (!session) {
+        setIsGoogleConnected(false);
+        return;
+      }
+      window.setTimeout(() => {
+        refreshGoogleConnectionStatus();
+      }, 0);
+    });
+
+    return () => {
+      isMounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [authRequired]);
+
   useEffect(() => {
     let isMounted = true;
     let removeNativeListener: (() => void) | undefined;
     const handleConnectionResult = (result: Awaited<ReturnType<typeof completeOAuthRedirect>>) => {
       if (!isMounted) return;
       if (result) {
+        if (result.googleConnected) {
+          setIsGoogleConnected(true);
+        }
         setConnectionNotice(result.message);
+        setAuthNotice(result.message);
       }
     };
 
@@ -459,9 +521,17 @@ function App() {
   async function connectProvider(key: IntegrationKey) {
     const result = await startIntegrationConnection(key);
     setConnectionNotice(result.message);
+    setAuthNotice(result.message);
+    if (result.googleConnected) {
+      setIsGoogleConnected(true);
+    }
   }
 
   async function syncGoogleWorkspaceData() {
+    if (!isGoogleConnected) {
+      setConnectionNotice("Connect Google once before syncing Gmail and Calendar.");
+      return;
+    }
     setConnectionNotice("Syncing Google Workspace data...");
     const result = await syncGoogleWorkspace({
       date: demoDate,
@@ -473,6 +543,31 @@ function App() {
         ? `${result.message} ${result.emailCount ?? 0} emails and ${result.calendarEventCount ?? 0} calendar events stored.`
         : `Google sync failed: ${result.message}`,
     );
+    if (result.ok) {
+      setIsGoogleConnected(true);
+    }
+  }
+
+  async function loginWithGoogle() {
+    setAuthNotice("Opening Google sign-in...");
+    const result = await startGoogleLogin();
+    setAuthNotice(result.message);
+  }
+
+  async function loginWithEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthNotice("Sending login link...");
+    const result = await startEmailLogin(loginEmail);
+    setAuthNotice(result.message);
+  }
+
+  async function logout() {
+    const result = await signOut();
+    setAuthNotice(result.message);
+    if (result.ok) {
+      setAuthSession(null);
+      setIsGoogleConnected(false);
+    }
   }
 
   async function runApiPlanner() {
@@ -616,6 +711,7 @@ function App() {
             {settings.sections.integrations ? (
               <IntegrationPanel
                 connectionNotice={connectionNotice}
+                googleConnected={isGoogleConnected}
                 onConnect={connectProvider}
                 onSyncGoogle={syncGoogleWorkspaceData}
               />
@@ -712,13 +808,36 @@ function App() {
     }
   }
 
+  if (authRequired && !isAuthReady) {
+    return <AuthLoadingScreen />;
+  }
+
+  if (authRequired && !authSession) {
+    return (
+      <LoginPage
+        email={loginEmail}
+        notice={authNotice}
+        onEmailChange={setLoginEmail}
+        onEmailSubmit={loginWithEmail}
+        onGoogleLogin={loginWithGoogle}
+      />
+    );
+  }
+
   return (
     <div
-      className={`app-shell theme-${settings.visualTheme} density-${settings.density}`}
+      className={`app-shell theme-${settings.visualTheme} density-${settings.density} sidebar-${settings.layout.sidebarStyle}`}
       data-theme={settings.visualTheme}
       data-density={settings.density}
     >
-      <Sidebar activePage={activePage} onNavigate={navigate} />
+      <Sidebar
+        activePage={activePage}
+        googleConnected={isGoogleConnected}
+        layout={settings.layout}
+        session={authSession}
+        onNavigate={navigate}
+        onSignOut={authRequired ? logout : undefined}
+      />
       <main className="workspace page-workspace" aria-labelledby="page-title">
         {renderCurrentPage()}
       </main>
@@ -732,26 +851,114 @@ function App() {
   );
 }
 
+function AuthLoadingScreen() {
+  return (
+    <main className="auth-shell" aria-label="Loading Autopilot-AI">
+      <section className="auth-panel">
+        <div className="brand-block">
+          <div className="brand-mark">A</div>
+          <div>
+            <p>Autopilot-AI</p>
+            <span>Loading workspace</span>
+          </div>
+        </div>
+        <p className="auth-note">Checking your session.</p>
+      </section>
+    </main>
+  );
+}
+
+function LoginPage({
+  email,
+  notice,
+  onEmailChange,
+  onEmailSubmit,
+  onGoogleLogin,
+}: {
+  email: string;
+  notice: string;
+  onEmailChange: (email: string) => void;
+  onEmailSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onGoogleLogin: () => void;
+}) {
+  return (
+    <main className="auth-shell" aria-labelledby="login-title">
+      <section className="auth-panel">
+        <div className="brand-block">
+          <div className="brand-mark">A</div>
+          <div>
+            <p>Autopilot-AI</p>
+            <span>Command</span>
+          </div>
+        </div>
+        <span className="eyebrow">Sign in</span>
+        <h1 id="login-title">Connect the inbox once. Work from the plan every day.</h1>
+        <p className="auth-copy">
+          Google sign-in connects Gmail and Calendar with read-only access. Email sign-in keeps your account available
+          when you want to connect Google later.
+        </p>
+        <button className="google-login-button" type="button" onClick={onGoogleLogin}>
+          <span aria-hidden="true">G</span>
+          Continue with Google
+        </button>
+        <div className="auth-divider">or</div>
+        <form className="email-login-form" onSubmit={onEmailSubmit}>
+          <label className="field-label">
+            Email
+            <input
+              aria-label="Email address"
+              autoComplete="email"
+              inputMode="email"
+              onChange={(event) => onEmailChange(event.target.value)}
+              placeholder="you@example.com"
+              type="email"
+              value={email}
+            />
+          </label>
+          <button className="secondary-action" type="submit">
+            Send login link
+          </button>
+        </form>
+        <p className="auth-note" aria-live="polite">
+          {notice}
+        </p>
+      </section>
+    </main>
+  );
+}
+
 function Sidebar({
   activePage,
+  googleConnected,
+  layout,
+  session,
   onNavigate,
+  onSignOut,
 }: {
   activePage: AppPage;
+  googleConnected: boolean;
+  layout: CustomizationSettings["layout"];
+  session: Session | null;
   onNavigate: (page: AppPage) => void;
+  onSignOut?: () => void;
 }) {
-  const navItems = [
-    { page: "daily", icon: <Inbox size={18} aria-hidden="true" /> },
-    { page: "productivity", icon: <MailOpen size={18} aria-hidden="true" /> },
-    { page: "sources", icon: <Link2 size={18} aria-hidden="true" /> },
-    { page: "actions", icon: <SlidersHorizontal size={18} aria-hidden="true" /> },
-    { page: "customize", icon: <Settings2 size={18} aria-hidden="true" /> },
-    { page: "calendar", icon: <CalendarDays size={18} aria-hidden="true" /> },
-    { page: "privacy", icon: <ShieldCheck size={18} aria-hidden="true" /> },
-    { page: "premium", icon: <CheckCircle2 size={18} aria-hidden="true" /> },
-  ] as const;
+  const navIcons: Record<AppPage, ReactNode> = {
+    daily: <Inbox size={18} aria-hidden="true" />,
+    productivity: <MailOpen size={18} aria-hidden="true" />,
+    sources: <Link2 size={18} aria-hidden="true" />,
+    actions: <SlidersHorizontal size={18} aria-hidden="true" />,
+    customize: <Settings2 size={18} aria-hidden="true" />,
+    calendar: <CalendarDays size={18} aria-hidden="true" />,
+    privacy: <ShieldCheck size={18} aria-hidden="true" />,
+    premium: <CheckCircle2 size={18} aria-hidden="true" />,
+  };
+  const orderedPages = [
+    ...layout.pageOrder.filter((page) => layout.pinnedPages.includes(page)),
+    ...layout.pageOrder.filter((page) => !layout.pinnedPages.includes(page)),
+  ].filter((page): page is AppPage => appPages.includes(page as AppPage));
 
   return (
-    <aside className="sidebar" aria-label="Primary">
+    <aside className={`sidebar sidebar-style-${layout.sidebarStyle}`} aria-label="Primary">
       <div className="brand-block">
         <div className="brand-mark">A</div>
         <div>
@@ -760,16 +967,18 @@ function Sidebar({
         </div>
       </div>
       <nav className="nav-list" aria-label="Workspace navigation">
-        {navItems.map((item) => (
+        {orderedPages.map((page) => (
           <button
-            aria-current={activePage === item.page ? "page" : undefined}
-            className={activePage === item.page ? "nav-link active" : "nav-link"}
-            key={item.page}
-            onClick={() => onNavigate(item.page)}
+            aria-current={activePage === page ? "page" : undefined}
+            className={activePage === page ? "nav-link active" : "nav-link"}
+            key={page}
+            onClick={() => onNavigate(page)}
             type="button"
+            title={pageLabels[page]}
           >
-            {item.icon}
-            <span>{pageLabels[item.page]}</span>
+            {navIcons[page]}
+            <span>{pageLabels[page]}</span>
+            {layout.pinnedPages.includes(page) ? <small>pinned</small> : null}
           </button>
         ))}
       </nav>
@@ -779,13 +988,18 @@ function Sidebar({
       <div className="operator">
         <img
           src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80"
-          alt="Demo user avatar"
+          alt=""
         />
         <div>
-          <strong>Mock workspace</strong>
-          <span>No live inbox data yet</span>
+          <strong>{session?.user.email ?? "Mock workspace"}</strong>
+          <span>{googleConnected ? "Google connected" : "Google not connected"}</span>
         </div>
       </div>
+      {onSignOut ? (
+        <button className="sidebar-signout" type="button" onClick={onSignOut}>
+          Sign out
+        </button>
+      ) : null}
     </aside>
   );
 }
@@ -835,10 +1049,12 @@ function HiddenSectionNotice({
 
 function IntegrationPanel({
   connectionNotice,
+  googleConnected,
   onConnect,
   onSyncGoogle,
 }: {
   connectionNotice: string;
+  googleConnected: boolean;
   onConnect: (key: IntegrationKey) => void;
   onSyncGoogle: () => void;
 }) {
@@ -860,15 +1076,20 @@ function IntegrationPanel({
           className="primary-action"
           type="button"
           onClick={onSyncGoogle}
-          disabled={!hasSupabaseConfig}
+          disabled={!hasSupabaseConfig || !googleConnected}
         >
           Sync Google data
         </button>
-        <span className="inline-help">Use after Google consent to store recent Gmail and today's Calendar events.</span>
+        <span className="inline-help">
+          {googleConnected
+            ? "Google is saved. Sync stores recent Gmail and today's Calendar events."
+            : "Connect Google once to enable Gmail and Calendar sync."}
+        </span>
       </div>
       <div className="integration-grid">
         {integrationProviders.map((provider) => (
           <IntegrationCard
+            googleConnected={googleConnected}
             key={provider.key}
             provider={provider}
             onConnect={onConnect}
@@ -912,7 +1133,7 @@ function SupabaseSetupPanel() {
         </article>
         <article>
           <strong>5. Deploy API functions</strong>
-          <p>Deploy `sync-google-workspace` and `plan-day`, then set the `OPENAI_API_KEY` Supabase secret.</p>
+          <p>Deploy `store-google-connection`, `sync-google-workspace`, and `plan-day`, then set Google, encryption, and OpenAI secrets.</p>
         </article>
       </div>
     </section>
@@ -1026,6 +1247,27 @@ function CustomizationPanel({
     onChange({ ...settings, calendar: { ...settings.calendar, ...next } });
   }
 
+  function updateLayout(next: Partial<CustomizationSettings["layout"]>) {
+    onChange({ ...settings, layout: { ...settings.layout, ...next } });
+  }
+
+  function movePage(page: WorkspacePageKey, direction: -1 | 1) {
+    const currentIndex = settings.layout.pageOrder.indexOf(page);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= settings.layout.pageOrder.length) return;
+    const nextOrder = [...settings.layout.pageOrder];
+    [nextOrder[currentIndex], nextOrder[nextIndex]] = [nextOrder[nextIndex], nextOrder[currentIndex]];
+    updateLayout({ pageOrder: nextOrder });
+  }
+
+  function togglePinnedPage(page: WorkspacePageKey) {
+    const isPinned = settings.layout.pinnedPages.includes(page);
+    const pinnedPages = isPinned
+      ? settings.layout.pinnedPages.filter((item) => item !== page)
+      : [...settings.layout.pinnedPages, page].slice(0, 4);
+    updateLayout({ pinnedPages });
+  }
+
   return (
     <section className="customize-panel" aria-labelledby="customize-title">
       <div className="section-heading">
@@ -1095,6 +1337,54 @@ function CustomizationPanel({
             label="Show data guardrails"
             onChange={(checked) => updateSections({ safeguards: checked })}
           />
+        </article>
+
+        <article className="customize-card workspace-layout-card">
+          <h3>Workspace layout</h3>
+          <label className="field-label">
+            Sidebar style
+            <select
+              aria-label="Sidebar style"
+              value={settings.layout.sidebarStyle}
+              onChange={(event) => updateLayout({ sidebarStyle: event.target.value as SidebarStyle })}
+            >
+              <option value="full">Full labels</option>
+              <option value="compact">Compact rail</option>
+              <option value="minimal">Minimal icons</option>
+            </select>
+          </label>
+          <div className="workspace-order-list" aria-label="Sidebar page order">
+            {settings.layout.pageOrder.map((page, index) => (
+              <div className="workspace-order-row" key={page}>
+                <button
+                  className={settings.layout.pinnedPages.includes(page) ? "pin-button active" : "pin-button"}
+                  type="button"
+                  onClick={() => togglePinnedPage(page)}
+                  aria-pressed={settings.layout.pinnedPages.includes(page)}
+                >
+                  Pin
+                </button>
+                <span>{pageLabels[page]}</span>
+                <button
+                  className="mini-filter"
+                  type="button"
+                  onClick={() => movePage(page, -1)}
+                  disabled={index === 0}
+                >
+                  Up
+                </button>
+                <button
+                  className="mini-filter"
+                  type="button"
+                  onClick={() => movePage(page, 1)}
+                  disabled={index === settings.layout.pageOrder.length - 1}
+                >
+                  Down
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="inline-help">Pinned pages stay at the top of the sidebar. Move rows to match how you work.</p>
         </article>
 
         <article className="customize-card">
@@ -1378,6 +1668,7 @@ function ImprovementStudio() {
   const [activeFilter, setActiveFilter] = useState<ImprovementFilter>("all");
   const [offlineMode, setOfflineMode] = useState(false);
   const [selectedActionIds, setSelectedActionIds] = useState<Set<string>>(new Set());
+  const [enabledActionIds, setEnabledActionIds] = useState<Set<string>>(new Set());
   const [appliedBehaviors, setAppliedBehaviors] = useState<AppliedBehavior[]>([]);
   const [syncQueue, setSyncQueue] = useState<AppliedBehavior[]>([]);
   const [lastBatch, setLastBatch] = useState<AppliedBehavior[]>([]);
@@ -1426,12 +1717,13 @@ function ImprovementStudio() {
 
   function applyAction(action: BehaviorAction) {
     const next = createAppliedBehavior(action);
+    setEnabledActionIds((current) => new Set(current).add(action.id));
     setAppliedBehaviors((current) => [next, ...current]);
     setLastBatch([next]);
     if (!next.synced) {
       setSyncQueue((current) => [next, ...current]);
     }
-    setLiveMessage(`${action.label} applied to ${themeLabels[activeSurface]}.`);
+    setLiveMessage(`${action.label} is now enabled for ${themeLabels[activeSurface]}.`);
   }
 
   function toggleSelectedAction(actionId: string) {
@@ -1453,6 +1745,11 @@ function ImprovementStudio() {
       return;
     }
     const applied = selected.map(createAppliedBehavior);
+    setEnabledActionIds((current) => {
+      const next = new Set(current);
+      selected.forEach((action) => next.add(action.id));
+      return next;
+    });
     setAppliedBehaviors((current) => [...applied, ...current]);
     setSyncQueue((current) => [
       ...applied.filter((action) => !action.synced),
@@ -1460,7 +1757,7 @@ function ImprovementStudio() {
     ]);
     setLastBatch(applied);
     setSelectedActionIds(new Set());
-    setLiveMessage(`${applied.length} actions applied with undo available.`);
+    setLiveMessage(`${applied.length} features enabled with undo available.`);
   }
 
   function undoLastBatch() {
@@ -1469,6 +1766,14 @@ function ImprovementStudio() {
       return;
     }
     const ids = new Set(lastBatch.map((action) => action.id));
+    const labels = new Set(lastBatch.map((action) => action.label));
+    setEnabledActionIds((current) => {
+      const next = new Set(current);
+      behaviorActions.forEach((action) => {
+        if (labels.has(action.label)) next.delete(action.id);
+      });
+      return next;
+    });
     setAppliedBehaviors((current) => current.filter((action) => !ids.has(action.id)));
     setSyncQueue((current) => current.filter((action) => !ids.has(action.id)));
     setLiveMessage(`${lastBatch.length} actions undone.`);
@@ -1558,6 +1863,7 @@ function ImprovementStudio() {
       <div className="improvement-overview" aria-label="Action lab metrics">
         <Metric label="Surfaces" value={String(surfaceOrder.length)} />
         <Metric label="Capabilities" value={String(capabilityOrder.length)} />
+        <Metric label="Enabled" value={String(enabledActionIds.size)} />
         <Metric label="Applied" value={String(appliedBehaviors.length)} />
         <Metric label="Sync queue" value={String(syncQueue.length)} />
       </div>
@@ -1673,7 +1979,10 @@ function ImprovementStudio() {
             </div>
             <div className="behavior-grid" aria-label="Action cards">
               {visibleActions.map((action) => (
-                <article className="behavior-card" key={action.id}>
+                <article
+                  className={enabledActionIds.has(action.id) ? "behavior-card enabled" : "behavior-card"}
+                  key={action.id}
+                >
                   <label className="select-line">
                     <input
                       type="checkbox"
@@ -1683,8 +1992,9 @@ function ImprovementStudio() {
                     <span>{action.label}</span>
                   </label>
                   <p>{action.detail}</p>
+                  {enabledActionIds.has(action.id) ? <span className="enabled-pill">Feature enabled</span> : null}
                   <button className="secondary-action" type="button" onClick={() => applyAction(action)}>
-                    Use this
+                    {enabledActionIds.has(action.id) ? "Use again" : "Use this"}
                   </button>
                 </article>
               ))}
@@ -1807,16 +2117,21 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function IntegrationCard({
+  googleConnected,
   provider,
   onConnect,
 }: {
+  googleConnected: boolean;
   provider: IntegrationProvider;
   onConnect: (key: IntegrationKey) => void;
 }) {
   const readiness = getConnectionReadiness(provider, hasSupabaseConfig);
-  const canConnect = readiness === "ready";
+  const isConnected = provider.key === "google" && googleConnected;
+  const canConnect = readiness === "ready" && !isConnected;
   const actionLabel =
-    readiness === "ready"
+    isConnected
+      ? "Connected"
+      : readiness === "ready"
       ? `Connect ${provider.shortName}`
       : readiness === "needs-supabase"
         ? "Add Supabase env"

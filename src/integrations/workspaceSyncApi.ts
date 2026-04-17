@@ -14,6 +14,23 @@ export interface GoogleWorkspaceSyncResult {
   calendarEventCount?: number;
 }
 
+export interface GoogleWorkspaceConnectionStatus {
+  connected: boolean;
+  status?: string;
+}
+
+export async function getGoogleWorkspaceConnectionStatus(): Promise<GoogleWorkspaceConnectionStatus> {
+  if (!supabase) return { connected: false };
+  const { data, error } = await supabase
+    .from("connected_accounts")
+    .select("status")
+    .eq("provider", "google")
+    .eq("status", "connected")
+    .maybeSingle();
+  if (error) return { connected: false };
+  return { connected: Boolean(data), status: data?.status };
+}
+
 export async function syncGoogleWorkspace(
   request: GoogleWorkspaceSyncRequest = {},
 ): Promise<GoogleWorkspaceSyncResult> {
@@ -31,17 +48,12 @@ export async function syncGoogleWorkspace(
 
   const session = sessionData.session as (typeof sessionData.session & { provider_token?: string }) | null;
   const providerAccessToken = session?.provider_token;
-  if (!providerAccessToken) {
-    return {
-      ok: false,
-      message: "Connect Google again, then run sync. Supabase did not expose a Google provider token for this session.",
-    };
-  }
 
   const { data, error } = await supabase.functions.invoke("sync-google-workspace", {
     body: {
       ...request,
-      providerAccessToken,
+      ...(providerAccessToken ? { providerAccessToken } : {}),
+      ...(session?.provider_refresh_token ? { providerRefreshToken: session.provider_refresh_token } : {}),
     },
   });
 

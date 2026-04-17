@@ -45,6 +45,22 @@ create table if not exists public.connected_accounts (
   unique (user_id, provider, provider_user_id)
 );
 
+create table if not exists public.provider_token_vault (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  organization_id uuid,
+  provider text not null check (provider in ('google', 'slack', 'whatsapp', 'microsoft', 'notion')),
+  provider_user_id text not null default 'primary',
+  access_token_ciphertext text,
+  refresh_token_ciphertext text,
+  access_token_expires_at timestamptz,
+  scopes text[] not null default '{}',
+  status text not null default 'connected' check (status in ('connected', 'needs_reauth', 'disabled')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, provider, provider_user_id)
+);
+
 create table if not exists public.action_items (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -243,6 +259,18 @@ $$;
 do $$
 begin
   if not exists (
+    select 1 from pg_constraint where conname = 'provider_token_vault_organization_id_fkey'
+  ) then
+    alter table public.provider_token_vault
+      add constraint provider_token_vault_organization_id_fkey
+      foreign key (organization_id) references public.organizations(id) on delete set null;
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
     select 1 from pg_constraint where conname = 'action_items_organization_id_fkey'
   ) then
     alter table public.action_items
@@ -266,6 +294,9 @@ $$;
 
 create index if not exists connected_accounts_user_provider_idx
   on public.connected_accounts(user_id, provider);
+
+create index if not exists provider_token_vault_user_provider_idx
+  on public.provider_token_vault(user_id, provider);
 
 create index if not exists action_items_user_status_due_idx
   on public.action_items(user_id, status, due_at);
@@ -307,6 +338,11 @@ for each row execute function public.set_updated_at();
 drop trigger if exists connected_accounts_set_updated_at on public.connected_accounts;
 create trigger connected_accounts_set_updated_at
 before update on public.connected_accounts
+for each row execute function public.set_updated_at();
+
+drop trigger if exists provider_token_vault_set_updated_at on public.provider_token_vault;
+create trigger provider_token_vault_set_updated_at
+before update on public.provider_token_vault
 for each row execute function public.set_updated_at();
 
 drop trigger if exists action_items_set_updated_at on public.action_items;
@@ -436,6 +472,7 @@ $$;
 alter table public.profiles enable row level security;
 alter table public.user_settings enable row level security;
 alter table public.connected_accounts enable row level security;
+alter table public.provider_token_vault enable row level security;
 alter table public.action_items enable row level security;
 alter table public.organizations enable row level security;
 alter table public.organization_memberships enable row level security;

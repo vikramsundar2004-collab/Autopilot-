@@ -3,6 +3,7 @@ dist/
 .dev-server/
 qa-screenshots/
 .codex/
+supabase/.temp/
 
 .env
 .env.local
