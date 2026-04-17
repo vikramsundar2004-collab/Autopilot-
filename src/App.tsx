@@ -40,6 +40,7 @@ import {
   summarizePlan,
 } from "./intelligence";
 import { completeOAuthRedirect, startIntegrationConnection } from "./integrations/auth";
+import { runDailyPlanner } from "./integrations/plannerApi";
 import {
   getConnectionReadiness,
   integrationProviders,
@@ -459,6 +460,20 @@ function App() {
     setConnectionNotice(result.message);
   }
 
+  async function runApiPlanner() {
+    setProductivityNotice("Running the AI planning API...");
+    const result = await runDailyPlanner({
+      date: demoDate,
+      timezone: "America/Los_Angeles",
+      planningMode: planMode,
+    });
+    setProductivityNotice(
+      result.ok
+        ? `${result.message} ${result.actionCount ?? 0} actions, ${result.scheduleBlockCount ?? 0} schedule blocks, ${result.approvalCount ?? 0} approvals.`
+        : `AI planning API failed: ${result.message}`,
+    );
+  }
+
   function navigate(page: AppPage) {
     setActivePage(page);
     window.history.pushState({}, "", `#${page}`);
@@ -488,6 +503,7 @@ function App() {
           setPlanMode(mode);
           setProductivityNotice(`Action list is sorted for ${planModeLabels[mode].toLowerCase()}.`);
         }}
+        onRunApiPlanner={runApiPlanner}
         onStartFocusSprint={startFocusSprint}
       />
     );
@@ -1163,6 +1179,7 @@ function ProductivityPanel({
   onCaptureTextChange,
   onFinishFocusSprint,
   onPlanModeChange,
+  onRunApiPlanner,
   onStartFocusSprint,
 }: {
   activeSprintTask: ActionItem | null;
@@ -1180,6 +1197,7 @@ function ProductivityPanel({
   onCaptureTextChange: (text: string) => void;
   onFinishFocusSprint: () => void;
   onPlanModeChange: (mode: PlanMode) => void;
+  onRunApiPlanner: () => void;
   onStartFocusSprint: () => void;
 }) {
   const sprintTask = activeSprintTask ?? nextSprintTask;
@@ -1222,6 +1240,9 @@ function ProductivityPanel({
               disabled={!activeSprintTask}
             >
               Finish sprint
+            </button>
+            <button className="secondary-action" type="button" onClick={onRunApiPlanner}>
+              Run AI planning API
             </button>
           </div>
         </article>

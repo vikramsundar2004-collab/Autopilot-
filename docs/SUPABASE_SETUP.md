@@ -47,11 +47,37 @@ This creates:
 - `user_settings`
 - `connected_accounts`
 - `action_items`
+- `organizations`
+- `organization_memberships`
+- `enterprise_policies`
+- `email_messages`
+- `calendar_events`
+- `plan_runs`
+- `schedule_blocks`
+- `approval_requests`
+- `audit_events`
+- `usage_events`
 - row-level security policies for user-owned rows
 
 It does not store provider refresh tokens. Tokens for Gmail, Slack messages, WhatsApp, Microsoft, and Notion need server-side storage before real ingestion.
 
-## 4. Configure Google OAuth
+## 4. Deploy the Planning API
+
+Install the Supabase CLI, then run:
+
+```bash
+supabase login
+supabase link --project-ref qwktgunwrasxthmssnxk
+supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+supabase secrets set OPENAI_PLANNER_MODEL=gpt-5-mini
+supabase functions deploy plan-day
+```
+
+The `OPENAI_API_KEY` secret stays inside Supabase Edge Functions. Do not add it as a `VITE_` browser variable.
+
+The app's Productivity page has a `Run AI planning API` button. It calls the `plan-day` Edge Function and shows the created action, schedule block, and approval counts.
+
+## 5. Configure Google OAuth
 
 In Google Cloud:
 
@@ -86,7 +112,7 @@ https://www.googleapis.com/auth/gmail.readonly
 https://www.googleapis.com/auth/calendar.events.readonly
 ```
 
-## 5. Test Locally
+## 6. Test Locally
 
 ```bash
 npm run dev
@@ -101,7 +127,16 @@ Expected result:
 3. Supabase redirects to `/auth/callback`.
 4. The app exchanges the code and returns to `/`.
 
-## 6. Next Backend Work
+To test the API button:
+
+1. Sign in through Supabase/Google.
+2. Open the Productivity page.
+3. Click `Run AI planning API`.
+4. Expect a notice with the plan source and persisted counts.
+
+If you have not built ingestion yet, the function can still run with zero stored messages and will create a fallback plan run. For realistic results, insert sample rows into `email_messages` and `calendar_events`, or call the function directly with test `emails` and `calendarEvents` arrays.
+
+## 7. Next Backend Work
 
 - Persist customization settings from `localStorage` into `user_settings`.
 - Store connected-account metadata in `connected_accounts`.

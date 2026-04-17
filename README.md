@@ -31,13 +31,14 @@ Native iOS build and simulator testing require macOS and Xcode. Read [docs/IOS_A
 
 ## Integration Setup
 
-Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) for the shortest path. The minimum local setup is:
+Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md), [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md), and [docs/API.md](docs/API.md) for the shortest path. The minimum local setup is:
 
 1. Copy `.env.example` to `.env`.
 2. Fill `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_APP_URL`.
 3. Run `supabase/schema.sql` in the Supabase SQL editor.
 4. Configure Google and Slack OIDC providers in Supabase Auth.
-5. Restart `npm run dev`.
+5. Deploy the `plan-day` Supabase Edge Function and set the `OPENAI_API_KEY` function secret.
+6. Restart `npm run dev`.
 
 ## What Is In V1
 
@@ -52,10 +53,11 @@ Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and [docs/SUPABASE_SETUP.md](d
 - An action lab covering recommendations, cross-device continuity, event triggers, shareable state, accessibility, multi-select actions, contextual hints, role-aware defaults, inline editing, and saved presets.
 - Premium value page covering executive briefs, work graph, AI citations, protected focus scheduling, delegation, approval-gated automation, security controls, personalization, and ROI reporting.
 - Source explainability, privacy boundary messaging, effort/impact scoring, and a recovery plan for missed work are built into the daily plan.
+- Supabase Edge Function API for authenticated daily planning, OpenAI-backed action extraction, deterministic fallback planning, schedule block persistence, approval requests, audit events, usage events, and enterprise policies.
 
 ## Deferred
 
 - Supabase database persistence wiring from the browser app into the starter schema.
-- Server routes or edge functions for Gmail, Slack messages, WhatsApp, Microsoft 365, and Notion ingestion.
+- Server ingestion for Gmail, Slack messages, WhatsApp, Microsoft 365, and Notion.
 - Pricing, billing, and plans.
-- Real AI/LLM extraction. The current extraction is deterministic mock logic for product validation.
+- Approval execution for draft emails, calendar changes, Slack updates, and other external writes.

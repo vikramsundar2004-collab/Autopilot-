@@ -57,7 +57,7 @@ describe("App", () => {
     expect(screen.getAllByText(/Customer reply sprint/).length).toBeGreaterThan(0);
   });
 
-  it("adds productivity controls for capture, planning modes, and focus sprints", () => {
+  it("adds productivity controls for capture, planning modes, focus sprints, and API planning", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
@@ -82,6 +82,9 @@ describe("App", () => {
 
     fireEvent.click(screen.getByText("Finish sprint"));
     expect(screen.getByText(/marked done from the focus sprint/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Run AI planning API"));
+    expect(await screen.findByText(/AI planning API failed: Add Supabase env vars/)).toBeInTheDocument();
   });
 
   it("renders a calendar-style day grid with events", () => {
