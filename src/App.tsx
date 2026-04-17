@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   Link2,
   LockKeyhole,
   MailOpen,
+  Settings2,
   ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
@@ -46,11 +47,105 @@ import {
   type IntegrationProvider,
 } from "./integrations/providers";
 import { hasSupabaseConfig } from "./integrations/supabaseClient";
+import {
+  defaultCustomizationSettings,
+  loadCustomizationSettings,
+  loadTutorialState,
+  saveCustomizationSettings,
+  saveTutorialState,
+  sanitizeCustomizationSettings,
+  type CalendarPreferences,
+  type CustomizationSettings,
+  type Density,
+  type EventBlockSize,
+  type PlanMode,
+  type TutorialState,
+  type VisualTheme,
+} from "./preferences";
 import type { ActionItem, CalendarEvent, EmailPriority, TaskStatus } from "./types";
 
 type TaskFilter = "all" | "urgent" | "waiting" | "done";
 type ImprovementFilter = "all" | ImprovementCapability;
-type PlanMode = "impact" | "quickWins" | "deepWork";
+const appPages = [
+  "daily",
+  "productivity",
+  "sources",
+  "actions",
+  "customize",
+  "calendar",
+  "privacy",
+  "premium",
+] as const;
+type AppPage = (typeof appPages)[number];
+
+const pageLabels: Record<AppPage, string> = {
+  daily: "Daily plan",
+  productivity: "Productivity",
+  sources: "Sources",
+  actions: "Actions",
+  customize: "Customize",
+  calendar: "Calendar",
+  privacy: "Privacy",
+  premium: "$200 plan",
+};
+
+const premiumFeatures = [
+  {
+    title: "Executive command brief",
+    outcome: "Daily CEO-level summary of what must be done, what is blocked, and which relationships need attention.",
+    surface: "Daily plan",
+  },
+  {
+    title: "Cross-platform work graph",
+    outcome: "One source map for Gmail, Calendar, Slack, WhatsApp, Microsoft, Notion, and future tools.",
+    surface: "Sources",
+  },
+  {
+    title: "AI action engine with citations",
+    outcome: "Every task keeps the source thread, confidence, risk, and the reason it was recommended.",
+    surface: "Actions",
+  },
+  {
+    title: "Protected focus scheduling",
+    outcome: "Calendar-aware focus windows and rescue plans that protect expensive deep work.",
+    surface: "Productivity",
+  },
+  {
+    title: "Delegation and owner tracking",
+    outcome: "Track who owns each follow-up, who is waiting, and where the next reminder belongs.",
+    surface: "Productivity",
+  },
+  {
+    title: "Approval-gated automation",
+    outcome: "Draft replies, task changes, snoozes, and syncs are previewed before anything touches live accounts.",
+    surface: "Actions",
+  },
+  {
+    title: "Calendar operations view",
+    outcome: "Google Calendar-style daily grid with agenda context, adjustable hours, and event sizing.",
+    surface: "Calendar",
+  },
+  {
+    title: "Enterprise privacy controls",
+    outcome: "Read-only defaults, explicit provider scopes, source verification, and token boundaries.",
+    surface: "Privacy",
+  },
+  {
+    title: "Workspace personalization",
+    outcome: "Per-user themes, density, visible work surfaces, planning defaults, and calendar preferences.",
+    surface: "Customize",
+  },
+  {
+    title: "Operator ROI dashboard",
+    outcome: "Quantify time saved, decisions unblocked, meetings protected, and urgent work resolved.",
+    surface: "$200 plan",
+  },
+] as const;
+
+function getInitialPage(): AppPage {
+  const rawHash = window.location.hash.replace(/^#\/?/, "");
+  return appPages.includes(rawHash as AppPage) ? (rawHash as AppPage) : "daily";
+}
 
 const filterLabels: Record<TaskFilter, string> = {
   all: "All",
@@ -72,10 +167,42 @@ const priorityRank: Record<EmailPriority, number> = {
   low: 1,
 };
 
-const calendarGridStartHour = 9;
-const calendarGridEndHour = 18;
-const calendarHourHeight = 56;
-const calendarGridHeight = (calendarGridEndHour - calendarGridStartHour) * calendarHourHeight;
+const eventSizeHourHeight: Record<EventBlockSize, number> = {
+  compact: 58,
+  comfortable: 72,
+  large: 88,
+};
+
+const tutorialSteps = [
+  {
+    title: "Start with the daily summary",
+    body: "The top of Autopilot-AI tells you how much work needs action and what deserves attention first.",
+  },
+  {
+    title: "Plan the next hour",
+    body: "Use focus sprints, quick capture, and planning modes to turn the day into the next useful move.",
+  },
+  {
+    title: "Connect your sources when ready",
+    body: "The integration cards explain which tools can connect now and which need backend support later.",
+  },
+  {
+    title: "Try the action lab",
+    body: "The action lab lets you test apply, undo, snooze, share, and preset flows before live data is connected.",
+  },
+  {
+    title: "Open the full calendar",
+    body: "The larger calendar section shows your day in a Google Calendar-style grid with events and agenda context.",
+  },
+  {
+    title: "Work from the action list",
+    body: "The task list keeps priorities, due times, source threads, confidence, and risk visible while you work.",
+  },
+  {
+    title: "Customize the workspace",
+    body: "Change themes, density, visible sections, productivity defaults, and calendar hours from the Customize panel.",
+  },
+] as const;
 
 interface AppliedBehavior {
   id: string;
@@ -97,12 +224,26 @@ interface SavedPreset {
 }
 
 function App() {
+  const [initialState] = useState(() => ({
+    settings: loadCustomizationSettings(),
+    tutorial: loadTutorialState(),
+  }));
+  const [settings, setSettings] = useState<CustomizationSettings>(initialState.settings);
+  const [tutorialState, setTutorialState] = useState<TutorialState>(initialState.tutorial);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(
+    () => !initialState.tutorial.completed && !initialState.tutorial.skipped,
+  );
+  const [activePage, setActivePage] = useState<AppPage>(getInitialPage);
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
   const [manualTasks, setManualTasks] = useState<ActionItem[]>([]);
-  const [planMode, setPlanMode] = useState<PlanMode>("impact");
+  const [planMode, setPlanMode] = useState<PlanMode>(
+    initialState.settings.productivity.defaultPlanMode,
+  );
   const [captureText, setCaptureText] = useState("");
-  const [captureMinutes, setCaptureMinutes] = useState(15);
+  const [captureMinutes, setCaptureMinutes] = useState(
+    initialState.settings.productivity.quickCaptureMinutes,
+  );
   const [capturePriority, setCapturePriority] = useState<EmailPriority>("medium");
   const [activeSprintId, setActiveSprintId] = useState("");
   const [productivityNotice, setProductivityNotice] = useState("Ready to plan the next hour.");
@@ -164,13 +305,63 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!window.location.hash) return;
-    const targetId = window.location.hash.slice(1);
-    const frame = window.requestAnimationFrame(() => {
-      document.getElementById(targetId)?.scrollIntoView({ block: "start" });
-    });
-    return () => window.cancelAnimationFrame(frame);
+    function handleHashChange() {
+      setActivePage(getInitialPage());
+    }
+
+    window.addEventListener("hashchange", handleHashChange);
+    window.addEventListener("popstate", handleHashChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+      window.removeEventListener("popstate", handleHashChange);
+    };
   }, []);
+
+  function applySettings(nextSettings: CustomizationSettings) {
+    const next = sanitizeCustomizationSettings(nextSettings);
+    const previous = settings;
+    setSettings(next);
+    saveCustomizationSettings(next);
+
+    if (previous.productivity.defaultPlanMode !== next.productivity.defaultPlanMode) {
+      setPlanMode(next.productivity.defaultPlanMode);
+      setProductivityNotice(
+        `Default planning mode set to ${planModeLabels[next.productivity.defaultPlanMode].toLowerCase()}.`,
+      );
+    }
+
+    if (previous.productivity.quickCaptureMinutes !== next.productivity.quickCaptureMinutes) {
+      setCaptureMinutes(next.productivity.quickCaptureMinutes);
+      setProductivityNotice(
+        `Quick capture default set to ${next.productivity.quickCaptureMinutes} minutes.`,
+      );
+    }
+  }
+
+  function resetSettings() {
+    applySettings(defaultCustomizationSettings);
+    setProductivityNotice("Customization reset to clean defaults.");
+  }
+
+  function updateTutorialState(next: TutorialState) {
+    setTutorialState(next);
+    saveTutorialState(next);
+  }
+
+  function skipTutorial(stepIndex: number) {
+    updateTutorialState({ completed: false, skipped: true, lastStep: stepIndex });
+    setIsTutorialOpen(false);
+  }
+
+  function completeTutorial() {
+    updateTutorialState({ completed: true, skipped: false, lastStep: tutorialSteps.length - 1 });
+    setIsTutorialOpen(false);
+  }
+
+  function replayTutorial() {
+    updateTutorialState({ completed: false, skipped: false, lastStep: 0 });
+    setIsTutorialOpen(true);
+  }
 
   function toggleTask(taskId: string) {
     setCompletedTasks((current) => {
@@ -246,117 +437,262 @@ function App() {
     setConnectionNotice(result.message);
   }
 
-  return (
-    <div className="app-shell">
-      <Sidebar />
-      <main className="workspace" aria-labelledby="page-title">
-        <Header summary={summary} />
-        <section className="command-band" aria-label="Daily command summary">
+  function navigate(page: AppPage) {
+    setActivePage(page);
+    window.history.pushState({}, "", `#${page}`);
+    if (!window.navigator.userAgent.includes("jsdom")) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function renderProductivityPanel() {
+    return (
+      <ProductivityPanel
+        activeSprintTask={activeSprintTask}
+        captureMinutes={captureMinutes}
+        capturePriority={capturePriority}
+        captureText={captureText}
+        deepWork={deepWork}
+        nextSprintTask={nextSprintTask}
+        notice={productivityNotice}
+        planMode={planMode}
+        quickWins={quickWins}
+        onAddManualTask={addManualTask}
+        onCaptureMinutesChange={setCaptureMinutes}
+        onCapturePriorityChange={setCapturePriority}
+        onCaptureTextChange={setCaptureText}
+        onFinishFocusSprint={finishFocusSprint}
+        onPlanModeChange={(mode) => {
+          setPlanMode(mode);
+          setProductivityNotice(`Action list is sorted for ${planModeLabels[mode].toLowerCase()}.`);
+        }}
+        onStartFocusSprint={startFocusSprint}
+      />
+    );
+  }
+
+  function renderTaskSection() {
+    return (
+      <section className="task-section" aria-labelledby="tasks-title">
+        <div className="section-heading">
           <div>
-            <span className="eyebrow">Today&apos;s call</span>
-            <h2>Do the customer reply, renewal approval, and launch edit before 4 PM.</h2>
+            <span className="eyebrow">Action list</span>
+            <h2 id="tasks-title">What has to be done</h2>
           </div>
-          <button className="primary-action" type="button">
-            Start next task
-            <ArrowRight size={18} aria-hidden="true" />
-          </button>
-        </section>
-
-        <ProductivityPanel
-          activeSprintTask={activeSprintTask}
-          captureMinutes={captureMinutes}
-          capturePriority={capturePriority}
-          captureText={captureText}
-          deepWork={deepWork}
-          nextSprintTask={nextSprintTask}
-          notice={productivityNotice}
-          planMode={planMode}
-          quickWins={quickWins}
-          onAddManualTask={addManualTask}
-          onCaptureMinutesChange={setCaptureMinutes}
-          onCapturePriorityChange={setCapturePriority}
-          onCaptureTextChange={setCaptureText}
-          onFinishFocusSprint={finishFocusSprint}
-          onPlanModeChange={(mode) => {
-            setPlanMode(mode);
-            setProductivityNotice(`Action list is sorted for ${planModeLabels[mode].toLowerCase()}.`);
-          }}
-          onStartFocusSprint={startFocusSprint}
-        />
-
-        <section className="integration-panel" aria-labelledby="integration-title">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Integrations</span>
-              <h2 id="integration-title">Connect the work sources</h2>
-            </div>
-            <div className={hasSupabaseConfig ? "status-pill ready" : "status-pill"}>
-              <LockKeyhole size={15} aria-hidden="true" />
-              {hasSupabaseConfig ? "Supabase env ready" : "Supabase env needed"}
-            </div>
-          </div>
-          <p className="section-note">{connectionNotice}</p>
-          <div className="integration-grid">
-            {integrationProviders.map((provider) => (
-              <IntegrationCard
-                key={provider.key}
-                provider={provider}
-                onConnect={connectProvider}
-              />
+          <div className="filter-row" aria-label="Task filters">
+            {(Object.keys(filterLabels) as TaskFilter[]).map((key) => (
+              <button
+                className={filter === key ? "filter-button active" : "filter-button"}
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                aria-pressed={filter === key}
+              >
+                {filterLabels[key]}
+                <span>{filterCounts[key]}</span>
+              </button>
             ))}
           </div>
-        </section>
+        </div>
+        <div className="task-list">
+          {filteredTasks.map((task, index) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              todayISO={demoDate}
+              index={index}
+              onToggle={toggleTask}
+            />
+          ))}
+        </div>
+      </section>
+    );
+  }
 
-        <ImprovementStudio />
-
-        <section className="task-section" aria-labelledby="tasks-title">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">Action list</span>
-              <h2 id="tasks-title">What has to be done</h2>
-            </div>
-            <div className="filter-row" aria-label="Task filters">
-              {(Object.keys(filterLabels) as TaskFilter[]).map((key) => (
-                <button
-                  className={filter === key ? "filter-button active" : "filter-button"}
-                  key={key}
-                  type="button"
-                  onClick={() => setFilter(key)}
-                  aria-pressed={filter === key}
-                >
-                  {filterLabels[key]}
-                  <span>{filterCounts[key]}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="task-list">
-            {filteredTasks.map((task, index) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                todayISO={demoDate}
-                index={index}
-                onToggle={toggleTask}
+  function renderCurrentPage() {
+    switch (activePage) {
+      case "daily":
+        return (
+          <>
+            <Header summary={summary} />
+            <section className="command-band" aria-label="Daily command summary">
+              <div>
+                <span className="eyebrow">Today&apos;s call</span>
+                <h2>Do the customer reply, renewal approval, and launch edit before 4 PM.</h2>
+              </div>
+              <button className="primary-action" type="button" onClick={() => navigate("productivity")}>
+                Start next task
+                <ArrowRight size={18} aria-hidden="true" />
+              </button>
+            </section>
+            {renderTaskSection()}
+          </>
+        );
+      case "productivity":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Productivity"
+              title="Plan the next block of work"
+              body="Capture loose work, switch planning modes, and protect the next focus sprint without mixing it into the task list."
+            />
+            {renderProductivityPanel()}
+            {settings.sections.focusWindows ? (
+              <FocusPanel
+                tasks={plan.rankedTasks}
+                windows={plan.focusWindows}
+                rescuePlan={plan.rescuePlan}
               />
-            ))}
-          </div>
-        </section>
+            ) : (
+              <HiddenSectionNotice
+                title="Focus windows are hidden"
+                body="Turn them back on in Customize when you want calendar-aware focus planning."
+                onCustomize={() => navigate("customize")}
+              />
+            )}
+          </>
+        );
+      case "sources":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Sources"
+              title="Connect the platforms that create work"
+              body="Start with read-only Google Workspace through Supabase, then add server-backed Slack, WhatsApp, Microsoft, and Notion ingestion."
+            />
+            {settings.sections.integrations ? (
+              <IntegrationPanel connectionNotice={connectionNotice} onConnect={connectProvider} />
+            ) : (
+              <HiddenSectionNotice
+                title="Sources are hidden"
+                body="The integration page is disabled by your workspace visibility settings."
+                onCustomize={() => navigate("customize")}
+              />
+            )}
+            <SupabaseSetupPanel />
+          </>
+        );
+      case "actions":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Actions"
+              title="Turn recommendations into controlled changes"
+              body="Apply, undo, queue, snooze, share, and save AI action presets before connecting live inbox data."
+            />
+            {settings.sections.actionLab ? (
+              <ImprovementStudio />
+            ) : (
+              <HiddenSectionNotice
+                title="Action lab is hidden"
+                body="Turn it back on in Customize when you want to test automations and approval flows."
+                onCustomize={() => navigate("customize")}
+              />
+            )}
+          </>
+        );
+      case "customize":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Customize"
+              title="Control how Autopilot-AI works"
+              body="Adjust theme, density, visible pages, productivity defaults, and calendar behavior. Changes apply immediately and persist locally."
+            />
+            <CustomizationPanel
+              settings={settings}
+              onChange={applySettings}
+              onReplayTutorial={replayTutorial}
+              onReset={resetSettings}
+            />
+          </>
+        );
+      case "calendar":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Calendar"
+              title="Work from a larger daily calendar"
+              body="A Google Calendar-style view keeps the time grid, event colors, agenda, and adjustable work hours in one focused page."
+            />
+            <FullCalendarSection
+              date={demoDate}
+              events={demoCalendar}
+              preferences={settings.calendar}
+            />
+          </>
+        );
+      case "privacy":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Privacy"
+              title="Keep live data behind explicit controls"
+              body="Autopilot-AI starts read-only, keeps tokens out of browser-only config, and marks every AI task with a source trail."
+            />
+            {settings.sections.safeguards ? (
+              <SafeguardsPanel />
+            ) : (
+              <HiddenSectionNotice
+                title="Data guardrails are hidden"
+                body="Turn them back on in Customize before testing live provider data."
+                onCustomize={() => navigate("customize")}
+              />
+            )}
+            <SecurityReadinessPanel />
+          </>
+        );
+      case "premium":
+        return (
+          <PremiumValuePage
+            onOpenActions={() => navigate("actions")}
+            onOpenCalendar={() => navigate("calendar")}
+            onOpenSources={() => navigate("sources")}
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div
+      className={`app-shell theme-${settings.visualTheme} density-${settings.density}`}
+      data-theme={settings.visualTheme}
+      data-density={settings.density}
+    >
+      <Sidebar activePage={activePage} onNavigate={navigate} />
+      <main className="workspace page-workspace" aria-labelledby="page-title">
+        {renderCurrentPage()}
       </main>
-      <aside className="insight-rail" aria-label="Calendar and insights">
-        <CalendarPanel events={demoCalendar} date={demoDate} />
-        <FocusPanel
-          tasks={plan.rankedTasks}
-          windows={plan.focusWindows}
-          rescuePlan={plan.rescuePlan}
-        />
-        <SafeguardsPanel />
-      </aside>
+      <TutorialModal
+        isOpen={isTutorialOpen}
+        initialStep={tutorialState.lastStep}
+        onComplete={completeTutorial}
+        onSkip={skipTutorial}
+      />
     </div>
   );
 }
 
-function Sidebar() {
+function Sidebar({
+  activePage,
+  onNavigate,
+}: {
+  activePage: AppPage;
+  onNavigate: (page: AppPage) => void;
+}) {
+  const navItems = [
+    { page: "daily", icon: <Inbox size={18} aria-hidden="true" /> },
+    { page: "productivity", icon: <MailOpen size={18} aria-hidden="true" /> },
+    { page: "sources", icon: <Link2 size={18} aria-hidden="true" /> },
+    { page: "actions", icon: <SlidersHorizontal size={18} aria-hidden="true" /> },
+    { page: "customize", icon: <Settings2 size={18} aria-hidden="true" /> },
+    { page: "calendar", icon: <CalendarDays size={18} aria-hidden="true" /> },
+    { page: "privacy", icon: <ShieldCheck size={18} aria-hidden="true" /> },
+    { page: "premium", icon: <CheckCircle2 size={18} aria-hidden="true" /> },
+  ] as const;
+
   return (
     <aside className="sidebar" aria-label="Primary">
       <div className="brand-block">
@@ -367,27 +703,22 @@ function Sidebar() {
         </div>
       </div>
       <nav className="nav-list" aria-label="Workspace navigation">
-        <a href="#tasks-title" className="nav-link active">
-          <Inbox size={18} aria-hidden="true" />
-          Daily plan
-        </a>
-        <a href="#integration-title" className="nav-link">
-          <Link2 size={18} aria-hidden="true" />
-          Sources
-        </a>
-        <a href="#improvements-title" className="nav-link">
-          <SlidersHorizontal size={18} aria-hidden="true" />
-          Actions
-        </a>
-        <a href="#calendar-title" className="nav-link">
-          <CalendarDays size={18} aria-hidden="true" />
-          Calendar
-        </a>
-        <a href="#safeguards-title" className="nav-link">
-          <ShieldCheck size={18} aria-hidden="true" />
-          Privacy
-        </a>
+        {navItems.map((item) => (
+          <button
+            aria-current={activePage === item.page ? "page" : undefined}
+            className={activePage === item.page ? "nav-link active" : "nav-link"}
+            key={item.page}
+            onClick={() => onNavigate(item.page)}
+            type="button"
+          >
+            {item.icon}
+            <span>{pageLabels[item.page]}</span>
+          </button>
+        ))}
       </nav>
+      <button className="sidebar-quick-action" type="button" onClick={() => onNavigate("customize")}>
+        Quick customization
+      </button>
       <div className="operator">
         <img
           src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80"
@@ -399,6 +730,398 @@ function Sidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+function PageHeader({
+  body,
+  eyebrow,
+  title,
+}: {
+  body: string;
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <header className="page-header">
+      <div>
+        <span className="eyebrow">{eyebrow}</span>
+        <h1 id="page-title">{title}</h1>
+        <p>{body}</p>
+      </div>
+    </header>
+  );
+}
+
+function HiddenSectionNotice({
+  body,
+  onCustomize,
+  title,
+}: {
+  body: string;
+  onCustomize: () => void;
+  title: string;
+}) {
+  return (
+    <section className="hidden-section-notice" aria-label={title}>
+      <div>
+        <span className="eyebrow">Hidden by customization</span>
+        <h2>{title}</h2>
+        <p>{body}</p>
+      </div>
+      <button className="secondary-action" type="button" onClick={onCustomize}>
+        Open Customize
+      </button>
+    </section>
+  );
+}
+
+function IntegrationPanel({
+  connectionNotice,
+  onConnect,
+}: {
+  connectionNotice: string;
+  onConnect: (key: IntegrationKey) => void;
+}) {
+  return (
+    <section className="integration-panel" aria-labelledby="integration-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Integrations</span>
+          <h2 id="integration-title">Connect the work sources</h2>
+        </div>
+        <div className={hasSupabaseConfig ? "status-pill ready" : "status-pill"}>
+          <LockKeyhole size={15} aria-hidden="true" />
+          {hasSupabaseConfig ? "Supabase env ready" : "Supabase env needed"}
+        </div>
+      </div>
+      <p className="section-note">{connectionNotice}</p>
+      <div className="integration-grid">
+        {integrationProviders.map((provider) => (
+          <IntegrationCard
+            key={provider.key}
+            provider={provider}
+            onConnect={onConnect}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SupabaseSetupPanel() {
+  const callbackUrl = "https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback";
+
+  return (
+    <section className="setup-panel" aria-labelledby="supabase-setup-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Supabase setup</span>
+          <h2 id="supabase-setup-title">What to configure before live testing</h2>
+        </div>
+        <div className={hasSupabaseConfig ? "status-pill ready" : "status-pill"}>
+          {hasSupabaseConfig ? "Local env detected" : ".env still needed"}
+        </div>
+      </div>
+      <div className="setup-grid">
+        <article>
+          <strong>1. Create the project</strong>
+          <p>Create a Supabase project, then copy `.env.example` to `.env`.</p>
+        </article>
+        <article>
+          <strong>2. Add browser-safe keys</strong>
+          <p>Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_APP_URL=http://127.0.0.1:5173`.</p>
+        </article>
+        <article>
+          <strong>3. Enable Google Auth</strong>
+          <p>In Supabase Auth, enable Google and paste the Google OAuth client ID and secret.</p>
+        </article>
+        <article>
+          <strong>4. Match redirect URLs</strong>
+          <p>Add `{callbackUrl}` in Google Cloud and Supabase provider settings, then restart Vite.</p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function SecurityReadinessPanel() {
+  return (
+    <section className="setup-panel" aria-labelledby="security-readiness-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">CSO checks</span>
+          <h2 id="security-readiness-title">Security posture for the first connected build</h2>
+        </div>
+      </div>
+      <div className="setup-grid compact">
+        <article>
+          <strong>Browser keys only</strong>
+          <p>Only the Supabase anon key is allowed in `VITE_` variables.</p>
+        </article>
+        <article>
+          <strong>Read-only Google scopes</strong>
+          <p>Gmail and Calendar start read-only until send actions have explicit approval gates.</p>
+        </article>
+        <article>
+          <strong>Server-only provider tokens</strong>
+          <p>WhatsApp, Microsoft, and Notion tokens stay behind backend routes and row-level security.</p>
+        </article>
+        <article>
+          <strong>Source-backed AI</strong>
+          <p>Every AI recommendation keeps source context, confidence, and risk visible.</p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function PremiumValuePage({
+  onOpenActions,
+  onOpenCalendar,
+  onOpenSources,
+}: {
+  onOpenActions: () => void;
+  onOpenCalendar: () => void;
+  onOpenSources: () => void;
+}) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="$200/month value"
+        title="Make Autopilot-AI feel like an operator, not a task list"
+        body="The premium version needs to save executive time, reduce missed follow-ups, and make every platform feel like one command center."
+      />
+      <section className="premium-panel" aria-labelledby="premium-title">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Built into this version</span>
+            <h2 id="premium-title">Premium capabilities to justify the price</h2>
+          </div>
+          <div className="status-pill ready">10 value drivers</div>
+        </div>
+        <div className="premium-grid">
+          {premiumFeatures.map((feature) => (
+            <article className="premium-card" key={feature.title}>
+              <span>{feature.surface}</span>
+              <h3>{feature.title}</h3>
+              <p>{feature.outcome}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="premium-actions" aria-label="Premium workflows">
+        <button className="primary-action" type="button" onClick={onOpenSources}>
+          Configure sources
+        </button>
+        <button className="secondary-action" type="button" onClick={onOpenActions}>
+          Test action engine
+        </button>
+        <button className="secondary-action" type="button" onClick={onOpenCalendar}>
+          Open calendar operations
+        </button>
+      </section>
+    </>
+  );
+}
+
+function CustomizationPanel({
+  settings,
+  onChange,
+  onReplayTutorial,
+  onReset,
+}: {
+  settings: CustomizationSettings;
+  onChange: (settings: CustomizationSettings) => void;
+  onReplayTutorial: () => void;
+  onReset: () => void;
+}) {
+  function update(next: Partial<CustomizationSettings>) {
+    onChange({ ...settings, ...next });
+  }
+
+  function updateSections(next: Partial<CustomizationSettings["sections"]>) {
+    onChange({ ...settings, sections: { ...settings.sections, ...next } });
+  }
+
+  function updateProductivity(next: Partial<CustomizationSettings["productivity"]>) {
+    onChange({ ...settings, productivity: { ...settings.productivity, ...next } });
+  }
+
+  function updateCalendar(next: Partial<CalendarPreferences>) {
+    onChange({ ...settings, calendar: { ...settings.calendar, ...next } });
+  }
+
+  return (
+    <section className="customize-panel" aria-labelledby="customize-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Customize</span>
+          <h2 id="customize-title">Make the workspace yours</h2>
+        </div>
+        <div className="button-row compact-actions">
+          <button className="secondary-action" type="button" onClick={onReplayTutorial}>
+            Replay tutorial
+          </button>
+          <button className="secondary-action" type="button" onClick={onReset}>
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div className="customize-grid">
+        <article className="customize-card">
+          <h3>Look and feel</h3>
+          <label className="field-label">
+            Visual theme
+            <select
+              aria-label="Visual theme"
+              value={settings.visualTheme}
+              onChange={(event) => update({ visualTheme: event.target.value as VisualTheme })}
+            >
+              <option value="clean">Clean light</option>
+              <option value="contrast">High contrast</option>
+              <option value="green">Soft green accent</option>
+              <option value="blue">Blue calendar accent</option>
+            </select>
+          </label>
+          <label className="field-label">
+            Density
+            <select
+              aria-label="Workspace density"
+              value={settings.density}
+              onChange={(event) => update({ density: event.target.value as Density })}
+            >
+              <option value="comfortable">Comfortable</option>
+              <option value="compact">Compact</option>
+              <option value="spacious">Spacious</option>
+            </select>
+          </label>
+        </article>
+
+        <article className="customize-card">
+          <h3>Workspace sections</h3>
+          <ToggleField
+            checked={settings.sections.integrations}
+            label="Show integrations"
+            onChange={(checked) => updateSections({ integrations: checked })}
+          />
+          <ToggleField
+            checked={settings.sections.actionLab}
+            label="Show action lab"
+            onChange={(checked) => updateSections({ actionLab: checked })}
+          />
+          <ToggleField
+            checked={settings.sections.focusWindows}
+            label="Show focus windows"
+            onChange={(checked) => updateSections({ focusWindows: checked })}
+          />
+          <ToggleField
+            checked={settings.sections.safeguards}
+            label="Show data guardrails"
+            onChange={(checked) => updateSections({ safeguards: checked })}
+          />
+        </article>
+
+        <article className="customize-card">
+          <h3>Productivity defaults</h3>
+          <label className="field-label">
+            Default planning mode
+            <select
+              aria-label="Default planning mode"
+              value={settings.productivity.defaultPlanMode}
+              onChange={(event) =>
+                updateProductivity({ defaultPlanMode: event.target.value as PlanMode })
+              }
+            >
+              <option value="impact">Impact</option>
+              <option value="quickWins">Quick wins</option>
+              <option value="deepWork">Deep work</option>
+            </select>
+          </label>
+          <label className="field-label">
+            Quick capture minutes
+            <input
+              aria-label="Default quick capture minutes"
+              min={5}
+              max={180}
+              step={5}
+              type="number"
+              value={settings.productivity.quickCaptureMinutes}
+              onChange={(event) =>
+                updateProductivity({ quickCaptureMinutes: Number(event.target.value) })
+              }
+            />
+          </label>
+        </article>
+
+        <article className="customize-card">
+          <h3>Calendar</h3>
+          <div className="capture-row">
+            <label className="field-label">
+              Start hour
+              <input
+                aria-label="Calendar start hour"
+                min={5}
+                max={22}
+                type="number"
+                value={settings.calendar.startHour}
+                onChange={(event) => updateCalendar({ startHour: Number(event.target.value) })}
+              />
+            </label>
+            <label className="field-label">
+              End hour
+              <input
+                aria-label="Calendar end hour"
+                min={6}
+                max={23}
+                type="number"
+                value={settings.calendar.endHour}
+                onChange={(event) => updateCalendar({ endHour: Number(event.target.value) })}
+              />
+            </label>
+          </div>
+          <label className="field-label">
+            Event block size
+            <select
+              aria-label="Event block size"
+              value={settings.calendar.eventSize}
+              onChange={(event) => updateCalendar({ eventSize: event.target.value as EventBlockSize })}
+            >
+              <option value="compact">Compact</option>
+              <option value="comfortable">Comfortable</option>
+              <option value="large">Large</option>
+            </select>
+          </label>
+          <ToggleField
+            checked={settings.calendar.showAgenda}
+            label="Show full calendar agenda"
+            onChange={(checked) => updateCalendar({ showAgenda: checked })}
+          />
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function ToggleField({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="toggle-row">
+      <input
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      {label}
+    </label>
   );
 }
 
@@ -1109,65 +1832,105 @@ function TaskCard({
   );
 }
 
-function CalendarPanel({ events, date }: { events: CalendarEvent[]; date: string }) {
+function FullCalendarSection({
+  date,
+  events,
+  preferences,
+}: {
+  date: string;
+  events: CalendarEvent[];
+  preferences: CalendarPreferences;
+}) {
   const weekDays = buildWeekDays(date);
+  const hourHeight = eventSizeHourHeight[preferences.eventSize];
+  const hours = buildCalendarHours(preferences.startHour, preferences.endHour);
+  const gridHeight = hours.length * hourHeight;
 
   return (
-    <section className="rail-section calendar-shell" aria-labelledby="calendar-title">
-      <div className="calendar-appbar">
-        <button type="button">Today</button>
+    <section className="full-calendar-section" aria-labelledby="full-calendar-title">
+      <div className="section-heading">
         <div>
-          <h2 id="calendar-title">Calendar</h2>
-          <span>{formatCalendarHeader(date)}</span>
+          <span className="eyebrow">Calendar</span>
+          <h2 id="full-calendar-title">Full calendar</h2>
         </div>
-        <CalendarDays size={18} aria-hidden="true" />
-      </div>
-
-      <div className="calendar-week-strip" aria-label="Week overview">
-        {weekDays.map((day) => (
-          <div className={day.isToday ? "calendar-day active" : "calendar-day"} key={day.key}>
-            <span>{day.weekday}</span>
-            <strong>{day.day}</strong>
-          </div>
-        ))}
-      </div>
-
-      <div className="calendar-day-grid" aria-label="Daily calendar">
-        {Array.from({ length: calendarGridEndHour - calendarGridStartHour }).map((_, index) => {
-          const hour = calendarGridStartHour + index;
-          return (
-            <div className="calendar-time-row" key={hour}>
-              <span>{formatHourLabel(hour)}</span>
-              <div />
-            </div>
-          );
-        })}
-        <div className="calendar-events-layer">
-          {events.map((event) => (
-            <article
-              className={`calendar-event-block ${event.type}`}
-              key={event.id}
-              style={{
-                top: `${getCalendarEventTop(event)}px`,
-                height: `${getCalendarEventHeight(event)}px`,
-              }}
-            >
-              <strong>{event.title}</strong>
-            </article>
-          ))}
+        <div className="status-pill ready">
+          <CalendarDays size={15} aria-hidden="true" />
+          {formatCalendarHeader(date)}
         </div>
       </div>
 
-      <div className="event-list compact-agenda" aria-label="Calendar agenda">
-        {events.map((event) => (
-          <article className={`event-row ${event.type}`} key={event.id}>
+      <div className="full-calendar-layout">
+        <div className="full-calendar-main">
+          <div className="calendar-toolbar">
+            <button type="button">Today</button>
             <span>
-              {formatTime(event.start)} - {formatTime(event.end)}
+              {preferences.startHour}:00 - {preferences.endHour}:00
             </span>
-            <strong>{event.title}</strong>
-            {event.attendees ? <small>{event.attendees.join(", ")}</small> : null}
-          </article>
-        ))}
+          </div>
+
+          <div className="calendar-week-strip large" aria-label="Week overview">
+            {weekDays.map((day) => (
+              <div className={day.isToday ? "calendar-day active" : "calendar-day"} key={day.key}>
+                <span>{day.weekday}</span>
+                <strong>{day.day}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div
+            className={`calendar-day-grid full size-${preferences.eventSize}`}
+            aria-label="Daily calendar"
+            style={{ height: `${gridHeight}px` }}
+          >
+            {hours.map((hour) => (
+              <div
+                className="calendar-time-row"
+                key={hour}
+                style={{ height: `${hourHeight}px` }}
+              >
+                <span>{formatHourLabel(hour)}</span>
+                <div />
+              </div>
+            ))}
+            <div className="calendar-events-layer">
+              {events.map((event) => (
+                <article
+                  className={`calendar-event-block ${event.type}`}
+                  key={event.id}
+                  style={{
+                    top: `${getCalendarEventTop(event, preferences.startHour, hourHeight)}px`,
+                    height: `${getCalendarEventHeight(
+                      event,
+                      preferences.startHour,
+                      preferences.endHour,
+                      hourHeight,
+                    )}px`,
+                  }}
+                >
+                  <strong>{event.title}</strong>
+                  <span>
+                    {formatTime(event.start)} - {formatTime(event.end)}
+                  </span>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {preferences.showAgenda ? (
+          <aside className="full-calendar-agenda" aria-label="Calendar agenda">
+            <h3>Agenda</h3>
+            {events.map((event) => (
+              <article className={`event-row ${event.type}`} key={event.id}>
+                <span>
+                  {formatTime(event.start)} - {formatTime(event.end)}
+                </span>
+                <strong>{event.title}</strong>
+                {event.attendees ? <small>{event.attendees.join(", ")}</small> : null}
+              </article>
+            ))}
+          </aside>
+        ) : null}
       </div>
     </section>
   );
@@ -1239,6 +2002,122 @@ function SafeguardsPanel() {
   );
 }
 
+function TutorialModal({
+  initialStep,
+  isOpen,
+  onComplete,
+  onSkip,
+}: {
+  initialStep: number;
+  isOpen: boolean;
+  onComplete: () => void;
+  onSkip: (stepIndex: number) => void;
+}) {
+  const [stepIndex, setStepIndex] = useState(initialStep);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const step = tutorialSteps[stepIndex] ?? tutorialSteps[0];
+  const isFinalStep = stepIndex === tutorialSteps.length - 1;
+
+  useEffect(() => {
+    if (isOpen) {
+      setStepIndex(initialStep);
+    }
+  }, [initialStep, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const dialog = dialogRef.current;
+    const focusableSelector = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+    const focusable = Array.from(
+      dialog?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
+    ).filter((element) => !element.hasAttribute("disabled"));
+    focusable[0]?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onSkip(stepIndex);
+        return;
+      }
+
+      if (event.key !== "Tab" || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onSkip, stepIndex]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="tutorial-backdrop" role="presentation">
+      <div
+        aria-describedby="tutorial-body"
+        aria-labelledby="tutorial-title"
+        aria-modal="true"
+        className="tutorial-dialog"
+        ref={dialogRef}
+        role="dialog"
+      >
+        <div className="tutorial-step-count">
+          Step {stepIndex + 1} of {tutorialSteps.length}
+        </div>
+        <h2 id="tutorial-title">{step.title}</h2>
+        <p id="tutorial-body">{step.body}</p>
+        <div className="tutorial-progress" aria-hidden="true">
+          {tutorialSteps.map((item, index) => (
+            <span
+              className={index === stepIndex ? "active" : ""}
+              key={item.title}
+            />
+          ))}
+        </div>
+        <div className="tutorial-actions">
+          <button
+            className="secondary-action"
+            disabled={stepIndex === 0}
+            onClick={() => setStepIndex((current) => Math.max(0, current - 1))}
+            type="button"
+          >
+            Back
+          </button>
+          <button
+            className="secondary-action"
+            onClick={() => onSkip(stepIndex)}
+            type="button"
+          >
+            Skip tutorial
+          </button>
+          {isFinalStep ? (
+            <button className="primary-action" onClick={onComplete} type="button">
+              Start using Autopilot-AI
+            </button>
+          ) : (
+            <button
+              className="primary-action"
+              onClick={() =>
+                setStepIndex((current) => Math.min(tutorialSteps.length - 1, current + 1))
+              }
+              type="button"
+            >
+              Next
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function prioritizeTasksForMode(tasks: ActionItem[], mode: PlanMode): ActionItem[] {
   const ordered = [...tasks];
   if (mode === "impact") return ordered;
@@ -1299,19 +2178,35 @@ function formatHourLabel(hour: number): string {
   }).format(new Date(2026, 0, 1, hour));
 }
 
-function getCalendarEventTop(event: CalendarEvent): number {
-  const start = new Date(event.start);
-  const minutesFromStart =
-    (start.getHours() - calendarGridStartHour) * 60 + start.getMinutes();
-  return Math.max(0, (minutesFromStart / 60) * calendarHourHeight);
+function buildCalendarHours(startHour: number, endHour: number): number[] {
+  return Array.from({ length: Math.max(1, endHour - startHour) }).map(
+    (_, index) => startHour + index,
+  );
 }
 
-function getCalendarEventHeight(event: CalendarEvent): number {
+function getCalendarEventTop(
+  event: CalendarEvent,
+  startHour: number,
+  hourHeight: number,
+): number {
+  const start = new Date(event.start);
+  const minutesFromStart = (start.getHours() - startHour) * 60 + start.getMinutes();
+  return Math.max(0, (minutesFromStart / 60) * hourHeight);
+}
+
+function getCalendarEventHeight(
+  event: CalendarEvent,
+  startHour: number,
+  endHour: number,
+  hourHeight: number,
+): number {
   const start = new Date(event.start);
   const end = new Date(event.end);
+  const top = getCalendarEventTop(event, startHour, hourHeight);
+  const gridHeight = Math.max(1, endHour - startHour) * hourHeight;
   const durationMinutes = Math.max(20, (end.getTime() - start.getTime()) / 60_000);
-  const naturalHeight = Math.max(30, (durationMinutes / 60) * calendarHourHeight);
-  const availableHeight = Math.max(22, calendarGridHeight - getCalendarEventTop(event) - 4);
+  const naturalHeight = Math.max(30, (durationMinutes / 60) * hourHeight);
+  const availableHeight = Math.max(22, gridHeight - top - 4);
   return Math.min(naturalHeight, availableHeight);
 }
 

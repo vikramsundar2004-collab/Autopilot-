@@ -55,3 +55,5 @@
 | 2026-04-17 | Simplify the visual system | The action lab is flatter, labels are shorter, shadows are quieter, and the page reads more like a focused work surface than a control matrix. |
 | 2026-04-17 | Add a familiar calendar day view | The integrated calendar now uses a week strip, hourly grid, and color-coded event blocks so it feels closer to Google Calendar while staying visually aligned with the app. |
 | 2026-04-17 | Add productivity controls above integrations | Focus sprints, quick capture, and planning modes are placed near the daily call because they directly change what the user does next. |
+| 2026-04-17 | Add practical customization | Theme, density, workspace visibility, productivity defaults, and calendar preferences are saved locally now and isolated for future Supabase profile storage. |
+| 2026-04-17 | Add a skippable tutorial | First-run guidance uses a small modal so users can learn the app without replacing the working dashboard. |

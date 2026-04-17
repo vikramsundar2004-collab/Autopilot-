@@ -57,24 +57,97 @@ a {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(220px, 248px) minmax(0, 1fr) minmax(320px, 360px);
+  grid-template-columns: 1fr;
   gap: 20px;
   width: 100%;
   min-height: 100vh;
   padding: 20px 18px;
 }
 
+.app-shell.theme-contrast {
+  --ink: #080808;
+  --muted: #30332f;
+  --surface: #ffffff;
+  --panel: #ffffff;
+  --line: #9aa29a;
+  --primary: #064f36;
+  --primary-strong: #022f20;
+  --shadow: none;
+}
+
+.app-shell.theme-green {
+  --surface: #f3f8f4;
+  --primary: #1f7a4d;
+  --primary-strong: #145334;
+  --line: #cddccf;
+}
+
+.app-shell.theme-blue {
+  --surface: #f7f9fc;
+  --primary: #1a73e8;
+  --primary-strong: #174ea6;
+  --info: #1a73e8;
+  --line: #d5dfef;
+}
+
+.app-shell.density-compact {
+  gap: 14px;
+  padding: 14px;
+}
+
+.app-shell.density-compact .workspace,
+.app-shell.density-compact .insight-rail {
+  gap: 14px;
+}
+
+.app-shell.density-compact .command-band,
+.app-shell.density-compact .integration-panel,
+.app-shell.density-compact .customize-panel,
+.app-shell.density-compact .hidden-section-notice,
+.app-shell.density-compact .premium-panel,
+.app-shell.density-compact .productivity-panel,
+.app-shell.density-compact .setup-panel,
+.app-shell.density-compact .task-section,
+.app-shell.density-compact .rail-section,
+.app-shell.density-compact .full-calendar-section {
+  padding: 14px;
+}
+
+.app-shell.density-spacious {
+  gap: 28px;
+  padding: 28px 24px;
+}
+
+.app-shell.density-spacious .workspace,
+.app-shell.density-spacious .insight-rail {
+  gap: 30px;
+}
+
+.app-shell.density-spacious .command-band,
+.app-shell.density-spacious .integration-panel,
+.app-shell.density-spacious .customize-panel,
+.app-shell.density-spacious .hidden-section-notice,
+.app-shell.density-spacious .premium-panel,
+.app-shell.density-spacious .productivity-panel,
+.app-shell.density-spacious .setup-panel,
+.app-shell.density-spacious .task-section,
+.app-shell.density-spacious .rail-section,
+.app-shell.density-spacious .full-calendar-section {
+  padding: 26px;
+}
+
 .sidebar,
 .insight-rail {
   align-self: start;
-  position: sticky;
+  position: static;
   top: 20px;
 }
 
 .sidebar {
-  min-height: calc(100vh - 40px);
+  min-height: auto;
   display: flex;
   flex-direction: column;
+  width: 100%;
   padding: 20px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.92);
@@ -137,16 +210,33 @@ a {
 
 .nav-link {
   gap: 10px;
+  width: 100%;
   min-height: 44px;
   padding: 0 12px;
   border-radius: 8px;
   color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
 }
 
 .nav-link.active,
 .nav-link:hover {
   color: var(--ink);
   background: #f0f2ee;
+}
+
+.sidebar-quick-action {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 18px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--primary-strong);
+  background: #e7f0ea;
+  cursor: pointer;
+  font-weight: 700;
 }
 
 .operator {
@@ -171,10 +261,42 @@ a {
   min-width: 0;
 }
 
+.page-workspace {
+  align-content: start;
+}
+
+@media (min-width: 1101px) {
+  .app-shell {
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  }
+
+  .sidebar,
+  .insight-rail {
+    position: sticky;
+  }
+
+  .sidebar {
+    min-height: calc(100vh - 40px);
+    width: auto;
+  }
+}
+
 .top-header > div:first-child,
+.page-header > div:first-child,
 .command-band > div:first-child,
 .section-heading > div:first-child {
   min-width: 0;
+}
+
+.page-header {
+  padding: 24px 4px 2px;
+}
+
+.page-header p {
+  max-width: 780px;
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .top-header {
@@ -269,9 +391,14 @@ h3 {
 }
 
 .command-band,
+.customize-panel,
+.full-calendar-section,
+.hidden-section-notice,
 .integration-panel,
 .improvement-section,
+.premium-panel,
 .productivity-panel,
+.setup-panel,
 .task-section,
 .rail-section {
   border: 1px solid var(--line);
@@ -334,10 +461,33 @@ h3 {
 
 .integration-panel,
 .improvement-section,
+.customize-panel,
+.full-calendar-section,
+.hidden-section-notice,
+.premium-panel,
 .productivity-panel,
+.setup-panel,
 .task-section,
 .rail-section {
   padding: 20px;
+}
+
+.hidden-section-notice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.hidden-section-notice p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.hidden-section-notice .secondary-action {
+  width: auto;
+  margin-top: 0;
 }
 
 .section-heading {
@@ -373,6 +523,67 @@ h3 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
   gap: 12px;
+}
+
+.setup-grid,
+.premium-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.setup-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.setup-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.setup-grid article,
+.premium-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.setup-grid article p,
+.premium-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.premium-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.premium-card span {
+  width: max-content;
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--primary-strong);
+  background: #e7f0ea;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.premium-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.premium-actions .primary-action,
+.premium-actions .secondary-action {
+  width: auto;
+  margin-top: 0;
 }
 
 .integration-card {
@@ -782,6 +993,36 @@ h3 {
   font: inherit;
 }
 
+.customize-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.customize-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.customize-card h3 {
+  margin-bottom: 0;
+}
+
+.compact-actions {
+  justify-content: flex-end;
+}
+
+.compact-actions .secondary-action {
+  width: auto;
+  margin-top: 0;
+}
+
 .productivity-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 0.84fr) minmax(0, 1.05fr);
@@ -1097,7 +1338,7 @@ h3 {
   gap: 16px;
 }
 
-.calendar-shell {
+.calendar-preview {
   padding: 16px;
 }
 
@@ -1107,6 +1348,10 @@ h3 {
   gap: 10px;
   align-items: center;
   margin-bottom: 14px;
+}
+
+.calendar-appbar.compact {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .calendar-appbar button {
@@ -1173,7 +1418,57 @@ h3 {
 
 .calendar-day.active strong {
   color: #ffffff;
-  background: #1a73e8;
+  background: var(--primary);
+}
+
+.full-calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 16px;
+}
+
+.full-calendar-main {
+  min-width: 0;
+}
+
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.calendar-toolbar button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.calendar-toolbar span {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  font-size: 0.8rem;
+}
+
+.calendar-week-strip.large {
+  gap: 8px;
+}
+
+.calendar-week-strip.large .calendar-day {
+  min-height: 64px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+}
+
+.calendar-week-strip.large .calendar-day strong {
+  width: 34px;
+  height: 34px;
+  font-size: 1rem;
 }
 
 .calendar-day-grid {
@@ -1183,6 +1478,10 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.calendar-day-grid.full {
+  min-height: 360px;
 }
 
 .calendar-time-row {
@@ -1224,6 +1523,11 @@ h3 {
   background: #e8f0fe;
 }
 
+.calendar-day-grid.full .calendar-event-block {
+  right: 10px;
+  padding: 9px 10px;
+}
+
 .calendar-event-block strong {
   font-size: 0.82rem;
   line-height: 1.2;
@@ -1247,11 +1551,52 @@ h3 {
   background: #fbe9e5;
 }
 
-.compact-agenda {
-  max-height: 226px;
+.preview-event-list {
+  display: grid;
+  gap: 8px;
+}
+
+.preview-event {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.preview-event:last-child {
+  border-bottom: 0;
+}
+
+.preview-event span {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  font-size: 0.74rem;
+}
+
+.preview-event.focus {
+  color: var(--success);
+}
+
+.preview-event.personal {
+  color: var(--accent);
+}
+
+.open-calendar-link {
+  margin-top: 12px;
+}
+
+.full-calendar-agenda {
+  align-self: start;
+  max-height: 680px;
   overflow: auto;
-  margin-top: 14px;
-  padding-right: 4px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.full-calendar-agenda h3 {
+  margin-bottom: 8px;
 }
 
 .rail-heading {
@@ -1312,15 +1657,72 @@ h3 {
   padding-left: 18px;
 }
 
+.tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(23, 23, 23, 0.28);
+}
+
+.tutorial-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(520px, 100%);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(23, 23, 23, 0.18);
+}
+
+.tutorial-dialog p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.tutorial-step-count {
+  color: var(--primary);
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tutorial-progress {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tutorial-progress span {
+  height: 6px;
+  border-radius: 999px;
+  background: #e9ece8;
+}
+
+.tutorial-progress span.active {
+  background: var(--primary);
+}
+
+.tutorial-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tutorial-actions .primary-action,
+.tutorial-actions .secondary-action {
+  width: auto;
+  margin-top: 0;
+}
+
 @media (max-width: 1280px) {
   .app-shell {
     grid-template-columns: 220px minmax(0, 1fr);
-  }
-
-  .insight-rail {
-    grid-column: 2;
-    position: static;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
 }
@@ -1338,14 +1740,13 @@ h3 {
   }
 
   .nav-list {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .nav-link {
     justify-content: center;
   }
 
-  .nav-link span,
   .operator {
     display: none;
   }
@@ -1362,9 +1763,15 @@ h3 {
   .improvement-layout,
   .action-lab-layout,
   .behavior-grid,
+  .customize-grid,
+  .full-calendar-layout,
+  .hidden-section-notice,
+  .premium-grid,
   .productivity-grid,
   .capture-row,
   .planning-lists,
+  .setup-grid,
+  .setup-grid.compact,
   .lab-split {
     grid-template-columns: 1fr;
   }
@@ -1384,9 +1791,14 @@ h3 {
   }
 
   .sidebar,
+  .customize-panel,
+  .full-calendar-section,
+  .hidden-section-notice,
   .integration-panel,
   .improvement-section,
+  .premium-panel,
   .productivity-panel,
+  .setup-panel,
   .task-section,
   .rail-section,
   .command-band {

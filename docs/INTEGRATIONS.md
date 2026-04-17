@@ -11,6 +11,7 @@ This is the shortest safe path to make the current app connect to real platforms
 - Added provider registry in `src/integrations/providers.ts`.
 - Added visible provider cards for Google, Slack, WhatsApp, Microsoft 365, and Notion.
 - Added tests that keep Google read-only and WhatsApp server-only.
+- Added `supabase/schema.sql` with starter profiles, settings, connected account metadata, action items, and row-level security policies.
 
 ## You Need To Do
 
@@ -26,9 +27,12 @@ VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 VITE_APP_URL=http://127.0.0.1:5173
 ```
 
-4. Restart the dev server after editing `.env`.
+4. Run `supabase/schema.sql` in the Supabase SQL editor.
+5. Restart the dev server after editing `.env`.
 
 Official docs: [Supabase signInWithOAuth](https://supabase.com/docs/reference/javascript/auth-signinwithoauth).
+
+Detailed local setup: [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
 
 ### 2. Google Gmail + Calendar
 
