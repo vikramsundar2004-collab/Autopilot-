@@ -86,7 +86,7 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
 
   return {
     ok: true,
-    message: `Connected ${String(provider)}. Tokens must be stored server-side before real ingestion is enabled.`,
+    message: `Connected ${String(provider)}. Run Sync Google data now; background sync still needs server-side refresh-token storage.`,
   };
 }
 

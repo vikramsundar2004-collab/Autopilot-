@@ -1,8 +1,21 @@
 # Autopilot-AI API
 
-The first backend slice is a Supabase Edge Function named `plan-day`. It turns stored or request-provided email and calendar signals into a daily action plan, schedule blocks, approval requests, audit events, and usage events.
+The first backend slice uses two Supabase Edge Functions:
+
+- `sync-google-workspace` pulls recent Gmail metadata and today's Google Calendar events into Supabase.
+- `plan-day` turns stored or request-provided email and calendar signals into a daily action plan, schedule blocks, approval requests, audit events, and usage events.
+
+The sync function uses the short-lived Google provider token from the active Supabase session. It does not store Google access or refresh tokens.
 
 ## What It Does
+
+`sync-google-workspace`:
+
+1. Verifies the caller with the Supabase user session bearer token.
+2. Uses the caller's Google provider access token to read Gmail and Calendar.
+3. Stores Gmail message metadata, snippets, sender, subject, labels, and received time in `email_messages`.
+4. Stores same-day primary-calendar events in `calendar_events`.
+5. Writes audit and usage events for enterprise reporting.
 
 `plan-day`:
 
@@ -63,6 +76,22 @@ For local API tests before provider ingestion exists, you can also pass `emails`
 
 If no OpenAI key is set, `source` is `fallback` and the function still persists a usable plan.
 
+## Google Sync Request
+
+The app calls this from `src/integrations/workspaceSyncApi.ts` after Google OAuth consent.
+
+```json
+{
+  "date": "2026-04-17",
+  "organizationId": "optional-org-uuid",
+  "maxEmails": 25,
+  "maxEvents": 50,
+  "providerAccessToken": "short-lived-google-token"
+}
+```
+
+The browser client gets `providerAccessToken` from the active Supabase session and passes it directly to the Edge Function. The function uses it immediately and does not write it to the database.
+
 ## Required Supabase Secrets
 
 Set these in Supabase, not in browser `.env` files:
@@ -79,6 +108,7 @@ supabase secrets set OPENAI_PLANNER_MODEL=gpt-5-mini
 ```bash
 supabase login
 supabase link --project-ref qwktgunwrasxthmssnxk
+supabase functions deploy sync-google-workspace
 supabase functions deploy plan-day
 ```
 
@@ -95,8 +125,7 @@ Then run `supabase/schema.sql` in the Supabase SQL editor if you have not alread
 
 ## Next Backend Slices
 
-- Gmail ingestion function that pulls messages through Google OAuth and writes `email_messages`.
-- Calendar ingestion function that writes `calendar_events`.
+- Server-side refresh-token vaulting so Google sync can run in the background after the short-lived provider token expires.
 - Slack, Microsoft, WhatsApp, and Notion ingestion through server-side token storage.
 - Generated draft replies and calendar-change proposals behind `approval_requests`.
 - Admin API for enterprise policy, audit export, retention, and seat management.

@@ -70,12 +70,15 @@ supabase login
 supabase link --project-ref qwktgunwrasxthmssnxk
 supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 supabase secrets set OPENAI_PLANNER_MODEL=gpt-5-mini
+supabase functions deploy sync-google-workspace
 supabase functions deploy plan-day
 ```
 
 The `OPENAI_API_KEY` secret stays inside Supabase Edge Functions. Do not add it as a `VITE_` browser variable.
 
-The app's Productivity page has a `Run AI planning API` button. It calls the `plan-day` Edge Function and shows the created action, schedule block, and approval counts.
+The app's Sources page has a `Sync Google data` button. It calls `sync-google-workspace` to store recent Gmail and today's Calendar rows.
+
+The app's Productivity page has a `Run AI planning API` button. It calls `plan-day` and shows the created action, schedule block, and approval counts.
 
 ## 5. Configure Google OAuth
 
@@ -127,18 +130,20 @@ Expected result:
 3. Supabase redirects to `/auth/callback`.
 4. The app exchanges the code and returns to `/`.
 
-To test the API button:
+To test the API path:
 
 1. Sign in through Supabase/Google.
-2. Open the Productivity page.
-3. Click `Run AI planning API`.
-4. Expect a notice with the plan source and persisted counts.
+2. Open the Sources page.
+3. Click `Sync Google data`.
+4. Open the Productivity page.
+5. Click `Run AI planning API`.
+6. Expect a notice with the plan source and persisted counts.
 
-If you have not built ingestion yet, the function can still run with zero stored messages and will create a fallback plan run. For realistic results, insert sample rows into `email_messages` and `calendar_events`, or call the function directly with test `emails` and `calendarEvents` arrays.
+If Google does not return a provider token, reconnect Google and keep `prompt=consent` in the OAuth query params. The current sync uses the active session token and does not persist refresh tokens yet.
 
 ## 7. Next Backend Work
 
 - Persist customization settings from `localStorage` into `user_settings`.
 - Store connected-account metadata in `connected_accounts`.
-- Add server-side token vaulting before any provider ingestion.
-- Add edge functions or API routes for Gmail sync, Slack message sync, WhatsApp webhooks, Microsoft Graph, and Notion.
+- Add server-side token vaulting before background provider ingestion.
+- Add edge functions or API routes for Slack message sync, WhatsApp webhooks, Microsoft Graph, and Notion.

@@ -37,7 +37,7 @@ Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md), [docs/SUPABASE_SETUP.md](docs
 2. Fill `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_APP_URL`.
 3. Run `supabase/schema.sql` in the Supabase SQL editor.
 4. Configure Google and Slack OIDC providers in Supabase Auth.
-5. Deploy the `plan-day` Supabase Edge Function and set the `OPENAI_API_KEY` function secret.
+5. Deploy the `sync-google-workspace` and `plan-day` Supabase Edge Functions, then set the `OPENAI_API_KEY` function secret.
 6. Restart `npm run dev`.
 
 ## What Is In V1
@@ -54,10 +54,11 @@ Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md), [docs/SUPABASE_SETUP.md](docs
 - Premium value page covering executive briefs, work graph, AI citations, protected focus scheduling, delegation, approval-gated automation, security controls, personalization, and ROI reporting.
 - Source explainability, privacy boundary messaging, effort/impact scoring, and a recovery plan for missed work are built into the daily plan.
 - Supabase Edge Function API for authenticated daily planning, OpenAI-backed action extraction, deterministic fallback planning, schedule block persistence, approval requests, audit events, usage events, and enterprise policies.
+- Google Workspace sync API for short-lived-session Gmail metadata and Calendar event ingestion into Supabase.
 
 ## Deferred
 
 - Supabase database persistence wiring from the browser app into the starter schema.
-- Server ingestion for Gmail, Slack messages, WhatsApp, Microsoft 365, and Notion.
+- Server refresh-token vaulting and background sync for Google, Slack messages, WhatsApp, Microsoft 365, and Notion.
 - Pricing, billing, and plans.
 - Approval execution for draft emails, calendar changes, Slack updates, and other external writes.

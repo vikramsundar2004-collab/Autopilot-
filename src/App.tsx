@@ -41,6 +41,7 @@ import {
 } from "./intelligence";
 import { completeOAuthRedirect, startIntegrationConnection } from "./integrations/auth";
 import { runDailyPlanner } from "./integrations/plannerApi";
+import { syncGoogleWorkspace } from "./integrations/workspaceSyncApi";
 import {
   getConnectionReadiness,
   integrationProviders,
@@ -460,6 +461,20 @@ function App() {
     setConnectionNotice(result.message);
   }
 
+  async function syncGoogleWorkspaceData() {
+    setConnectionNotice("Syncing Google Workspace data...");
+    const result = await syncGoogleWorkspace({
+      date: demoDate,
+      maxEmails: 25,
+      maxEvents: 50,
+    });
+    setConnectionNotice(
+      result.ok
+        ? `${result.message} ${result.emailCount ?? 0} emails and ${result.calendarEventCount ?? 0} calendar events stored.`
+        : `Google sync failed: ${result.message}`,
+    );
+  }
+
   async function runApiPlanner() {
     setProductivityNotice("Running the AI planning API...");
     const result = await runDailyPlanner({
@@ -599,7 +614,11 @@ function App() {
               body="Start with read-only Google Workspace through Supabase, then add server-backed Slack, WhatsApp, Microsoft, and Notion ingestion."
             />
             {settings.sections.integrations ? (
-              <IntegrationPanel connectionNotice={connectionNotice} onConnect={connectProvider} />
+              <IntegrationPanel
+                connectionNotice={connectionNotice}
+                onConnect={connectProvider}
+                onSyncGoogle={syncGoogleWorkspaceData}
+              />
             ) : (
               <HiddenSectionNotice
                 title="Sources are hidden"
@@ -817,9 +836,11 @@ function HiddenSectionNotice({
 function IntegrationPanel({
   connectionNotice,
   onConnect,
+  onSyncGoogle,
 }: {
   connectionNotice: string;
   onConnect: (key: IntegrationKey) => void;
+  onSyncGoogle: () => void;
 }) {
   return (
     <section className="integration-panel" aria-labelledby="integration-title">
@@ -834,6 +855,17 @@ function IntegrationPanel({
         </div>
       </div>
       <p className="section-note">{connectionNotice}</p>
+      <div className="button-row source-actions">
+        <button
+          className="primary-action"
+          type="button"
+          onClick={onSyncGoogle}
+          disabled={!hasSupabaseConfig}
+        >
+          Sync Google data
+        </button>
+        <span className="inline-help">Use after Google consent to store recent Gmail and today's Calendar events.</span>
+      </div>
       <div className="integration-grid">
         {integrationProviders.map((provider) => (
           <IntegrationCard
@@ -877,6 +909,10 @@ function SupabaseSetupPanel() {
         <article>
           <strong>4. Match redirect URLs</strong>
           <p>Add `{callbackUrl}` in Google Cloud and Supabase provider settings, then restart Vite.</p>
+        </article>
+        <article>
+          <strong>5. Deploy API functions</strong>
+          <p>Deploy `sync-google-workspace` and `plan-day`, then set the `OPENAI_API_KEY` Supabase secret.</p>
         </article>
       </div>
     </section>
