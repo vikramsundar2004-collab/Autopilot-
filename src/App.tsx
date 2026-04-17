@@ -297,11 +297,33 @@ function App() {
   };
 
   useEffect(() => {
-    completeOAuthRedirect().then((result) => {
+    let isMounted = true;
+    let removeNativeListener: (() => void) | undefined;
+    const handleConnectionResult = (result: Awaited<ReturnType<typeof completeOAuthRedirect>>) => {
+      if (!isMounted) return;
       if (result) {
         setConnectionNotice(result.message);
       }
-    });
+    };
+
+    completeOAuthRedirect().then(handleConnectionResult);
+    import("@capacitor/app")
+      .then(({ App: NativeApp }) =>
+        NativeApp.addListener("appUrlOpen", ({ url }) => {
+          completeOAuthRedirect(url).then(handleConnectionResult);
+        }),
+      )
+      .then((listener) => {
+        removeNativeListener = () => {
+          void listener.remove();
+        };
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+      removeNativeListener?.();
+    };
   }, []);
 
   useEffect(() => {

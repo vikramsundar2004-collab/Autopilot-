@@ -27,6 +27,12 @@ Site URL: http://127.0.0.1:5173
 Redirect URL: http://127.0.0.1:5173/auth/callback
 ```
 
+For the iOS app, also add:
+
+```text
+Redirect URL: com.autopilotai.app://auth/callback
+```
+
 ## 3. Run Starter Schema
 
 Open the Supabase SQL editor and run:
@@ -61,6 +67,8 @@ http://127.0.0.1:5173
 ```text
 https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback
 ```
+
+Do not add the iOS custom scheme to Google Cloud. Google returns to Supabase first, then Supabase redirects back to `com.autopilotai.app://auth/callback`.
 
 In Supabase Auth Providers:
 

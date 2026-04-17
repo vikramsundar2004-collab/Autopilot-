@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import type { IntegrationKey } from "./providers";
 import { getProviderByKey } from "./providers";
 import { getAppUrl, hasSupabaseConfig, supabase } from "./supabaseClient";
@@ -38,7 +39,7 @@ export async function startIntegrationConnection(
   const { error } = await supabase.auth.signInWithOAuth({
     provider: provider.supabaseProvider,
     options: {
-      redirectTo: `${getAppUrl()}/auth/callback`,
+      redirectTo: getOAuthRedirectUrl(),
       scopes: provider.scopes.join(" "),
       queryParams,
     },
@@ -54,12 +55,18 @@ export async function startIntegrationConnection(
   };
 }
 
-export async function completeOAuthRedirect(): Promise<ConnectionResult | null> {
-  if (!supabase || !window.location.pathname.includes("/auth/callback")) {
+export async function completeOAuthRedirect(callbackUrl = window.location.href): Promise<ConnectionResult | null> {
+  if (!supabase) {
     return null;
   }
 
-  const code = new URLSearchParams(window.location.search).get("code");
+  const url = new URL(callbackUrl);
+  const callbackPath = `${url.host}${url.pathname}`;
+  if (!callbackPath.includes("auth/callback")) {
+    return null;
+  }
+
+  const code = url.searchParams.get("code");
   if (!code) {
     return {
       ok: false,
@@ -72,11 +79,21 @@ export async function completeOAuthRedirect(): Promise<ConnectionResult | null> 
     return { ok: false, message: error.message };
   }
 
-  window.history.replaceState({}, document.title, "/");
+  if (window.location.pathname.includes("/auth/callback")) {
+    window.history.replaceState({}, document.title, "/");
+  }
   const provider = data.session?.user.app_metadata.provider ?? "provider";
 
   return {
     ok: true,
     message: `Connected ${String(provider)}. Tokens must be stored server-side before real ingestion is enabled.`,
   };
+}
+
+function getOAuthRedirectUrl(): string {
+  if (Capacitor.isNativePlatform()) {
+    return import.meta.env.VITE_IOS_REDIRECT_URL?.trim() || "com.autopilotai.app://auth/callback";
+  }
+
+  return `${getAppUrl()}/auth/callback`;
 }

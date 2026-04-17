@@ -18,6 +18,17 @@ npm run test
 npm run build
 ```
 
+## iOS App
+
+The project includes a Capacitor iOS shell with bundle ID `com.autopilotai.app`.
+
+```bash
+npm run ios:sync
+npm run ios:open
+```
+
+Native iOS build and simulator testing require macOS and Xcode. Read [docs/IOS_APP.md](docs/IOS_APP.md).
+
 ## Integration Setup
 
 Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) for the shortest path. The minimum local setup is:
