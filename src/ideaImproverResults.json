@@ -1,0 +1,919 @@
+{
+  "generatedAt": "2026-04-17T06:29:59.389Z",
+  "rounds": [
+    {
+      "id": 1,
+      "label": "First 75-idea pass",
+      "idea": "Tempo Inbox: a productivity app that reads a user inbox, calendar, Slack, WhatsApp, and other work platforms; extracts what has to be done; builds a clean daily plan; keeps source proof and privacy guardrails; currently mock-backed with Supabase OAuth scaffolding and no pricing yet. Generate 75 practical improvements for the current AI prototype.",
+      "improvements": [
+        {
+          "title": "Personalized templates recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized onboarding recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized workspace recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized checklist recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized dashboard recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized assistant recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized reminders recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized onboarding cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized onboarding event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates accessibility",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with accessibility shortcuts and contrast tuning.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized workspace cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized workspace event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized checklist cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized checklist event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized dashboard cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized dashboard event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized assistant cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized assistant event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized history recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized reminders cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized reminders event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates multi-select",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with multi-select actions and undo stack.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized search recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized onboarding shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized history cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized history event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates contextual",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with contextual hints and progressive disclosure.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates role-aware",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with role-aware defaults and switchable layouts.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided onboarding recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized workspace shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized checklist shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized dashboard shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized assistant shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized reminders shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized search cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized search event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized feed recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement feed flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided workspace recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided checklist recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided dashboard recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided assistant recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided reminders recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided onboarding cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided onboarding event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates accessibility",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with accessibility shortcuts and contrast tuning.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized history shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized feed cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement feed flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized feed event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement feed flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided workspace cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided workspace event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided checklist cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided checklist event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided dashboard cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided dashboard event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided assistant cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided assistant event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided history recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided reminders cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided reminders event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates multi-select",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with multi-select actions and undo stack.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized search shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates inline",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with inline editing and confirmation safeguards.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided search recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates saved",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with saved presets and quick restore.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided onboarding shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided history cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided history event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates contextual",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with contextual hints and progressive disclosure.",
+          "impact": "Medium"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "label": "Second 75-idea pass",
+      "idea": "Tempo Inbox after one improvement pass: improve it again with 75 additional practical product, UX, architecture, safety, testability, and integration improvements. Avoid pricing. Focus on what can be reflected in a high-quality AI prototype and future-ready scaffolding.",
+      "improvements": [
+        {
+          "title": "Personalized templates recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized onboarding recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized workspace recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized checklist recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized dashboard recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized assistant recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized reminders recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized onboarding cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized onboarding event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates accessibility",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with accessibility shortcuts and contrast tuning.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized workspace cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized workspace event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized checklist cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized checklist event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized dashboard cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized dashboard event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized assistant cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized assistant event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized history recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized reminders cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized reminders event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates multi-select",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with multi-select actions and undo stack.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized search recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized onboarding shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized history cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized history event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates contextual",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with contextual hints and progressive disclosure.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates role-aware",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with role-aware defaults and switchable layouts.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided onboarding recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized workspace shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized checklist shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized dashboard shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized assistant shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized reminders shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized search cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized search event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized feed recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement feed flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided workspace recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided checklist recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided dashboard recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided assistant recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided reminders recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided onboarding cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided onboarding event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates accessibility",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with accessibility shortcuts and contrast tuning.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized history shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized feed cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement feed flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized feed event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement feed flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided workspace cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided workspace event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement workspace flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided checklist cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided checklist event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement checklist flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided dashboard cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided dashboard event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement dashboard flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided assistant cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided assistant event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement assistant flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided history recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided reminders cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided reminders event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement reminders flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates multi-select",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with multi-select actions and undo stack.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized search shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates inline",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with inline editing and confirmation safeguards.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided search recommendation",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement search flow with recommendation cards and one-click apply.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Personalized templates saved",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with saved presets and quick restore.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided onboarding shareable",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement onboarding flow with shareable links and state preservation.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided history cross-device",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with cross-device continuity and offline queue.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided history event-driven",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement history flow with event-driven notifications and snooze controls.",
+          "impact": "Medium"
+        },
+        {
+          "title": "Guided templates contextual",
+          "why_it_helps": "Feature depth increases usability, retention, and completion consistency.",
+          "how_to_apply": "Implement templates flow with contextual hints and progressive disclosure.",
+          "impact": "Medium"
+        }
+      ]
+    }
+  ]
+}
