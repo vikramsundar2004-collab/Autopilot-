@@ -1,0 +1,116 @@
+AUTOPILOT-AI BUSINESS OFFER
+
+This document is internal planning material.
+It is not wired into the app or the public site.
+
+Core product promise
+- Autopilot-AI turns Gmail and Calendar overload into a source-backed daily operating plan.
+- It helps the user see what matters, block private senders from AI, draft replies, and protect time on the calendar.
+
+Who this offer is for
+- People with heavy inbox volume
+- Founders
+- Chiefs of staff
+- Recruiters
+- Operators
+- Managers who work from Gmail and Calendar all day
+
+BEGINNER PLAN
+Price
+- $5/month
+
+Positioning
+- The low-friction entry point.
+- Gives the user the first real "aha" without overwhelming them.
+
+Included
+- Gmail sync
+- Google Calendar sync
+- Source-backed action extraction
+- Daily action list
+- Private sender AI blocking
+- Basic calendar planning view
+- Manual calendar blocks
+- Limited reply draft generation
+- Basic workspace customization
+
+Limits
+- Lower sync volume
+- Fewer draft generations per day
+- Fewer saved planning runs
+- No premium onboarding
+
+Best fit
+- Students
+- Solo founders
+- Freelancers
+- Budget-conscious first-time users
+
+PLUS PLAN
+Price
+- $25/month
+
+Positioning
+- The serious individual operator plan.
+- This should become the default paid tier.
+
+Included
+- Everything in Beginner
+- Full AI daily planning
+- Focus windows
+- Quick capture
+- Planning modes: Impact, Quick wins, Deep work
+- Editable reply drafts with tone selection
+- Assistant commands for draft generation and calendar blocks
+- Action lab workflows
+- Deeper workspace customization
+- More sync volume
+- More planning history
+
+Best fit
+- Operators
+- Chiefs of staff
+- Startup employees
+- Recruiters
+- Managers with constant inbound requests
+
+PRO PLAN
+Price
+- $200/month
+
+Positioning
+- The high-trust, high-touch plan.
+- Sell control, time savings, onboarding, and enterprise-style visibility.
+
+Included
+- Everything in Plus
+- Executive command brief
+- Approval-aware workflows
+- Audit and usage visibility
+- Organization policy controls
+- Premium privacy posture
+- High usage limits
+- White-glove onboarding
+- Fast support
+- Hands-on setup help
+
+Best fit
+- Executives
+- Agency owners
+- Team leads
+- Operators whose time is worth much more than the subscription
+
+Packaging logic
+- Beginner proves the core Gmail-to-action value fast.
+- Plus captures the real everyday planning workflow.
+- Pro sells trust, control, and leverage.
+
+Recommended sales message
+- Beginner: "Turn Gmail into a clean daily action list."
+- Plus: "Let AI help run the day, not just sort the inbox."
+- Pro: "Run your work like you have an AI operator with guardrails."
+
+Recommended rollout
+1. Lead with Plus as the default recommendation.
+2. Keep Beginner as the easy yes.
+3. Use Pro for high-touch customers who need trust and control.

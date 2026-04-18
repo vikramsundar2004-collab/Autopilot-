@@ -179,6 +179,78 @@ describe("App", () => {
     expect(screen.getByLabelText("Calendar event title")).toBeInTheDocument();
   });
 
+  it("shows editable themed reply drafts for important synced email", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Drafts" }));
+    expect(
+      screen.getByRole("heading", { name: "Edit reply drafts before they go back into Gmail" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Escalation from Northstar Health")).toBeInTheDocument();
+
+    const draftBody = screen.getByLabelText(
+      "Draft body for Escalation from Northstar Health",
+    ) as HTMLTextAreaElement;
+    expect(draftBody.value).toContain("I am preparing the direct reply now");
+
+    fireEvent.change(screen.getByLabelText("Draft theme"), {
+      target: { value: "executive" },
+    });
+    expect(
+      (screen.getByLabelText("Draft body for Escalation from Northstar Health") as HTMLTextAreaElement)
+        .value,
+    ).toContain("I am preparing the response now");
+
+    fireEvent.change(screen.getByLabelText("Draft body for Escalation from Northstar Health"), {
+      target: { value: "Custom reply body" },
+    });
+    expect(
+      (screen.getByLabelText("Draft body for Escalation from Northstar Health") as HTMLTextAreaElement)
+        .value,
+    ).toBe("Custom reply body");
+  });
+
+  it("uses the assistant to collect blocked senders before planning", async () => {
+    render(<App />);
+
+    expect(screen.getByLabelText("Private sender emails")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Private sender emails"), {
+      target: { value: "payroll@example.com" },
+    });
+    fireEvent.click(screen.getByText("Save blocked senders"));
+
+    expect(await screen.findByText("Privacy setup saved")).toBeInTheDocument();
+    expect(screen.getByText(/1 sender blocked from AI before planning starts/)).toBeInTheDocument();
+  });
+
+  it("uses the assistant to add a calendar block and open the calendar", async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("Assistant request"), {
+      target: { value: "Add calendar Deep work tomorrow 3pm to 4pm" },
+    });
+    fireEvent.click(screen.getByText("Run assistant"));
+
+    expect(
+      await screen.findByRole("heading", { name: "Work from a larger daily calendar" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Deep work").length).toBeGreaterThan(0);
+  });
+
+  it("uses the assistant to open the drafts page for a requested reply", async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("Assistant request"), {
+      target: { value: "Draft a reply for Northstar" },
+    });
+    fireEvent.click(screen.getByText("Run assistant"));
+
+    expect(
+      await screen.findByRole("heading", { name: "Edit reply drafts before they go back into Gmail" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Escalation from Northstar Health")).toBeInTheDocument();
+  });
+
   it("applies workflow templates as usable productivity shortcuts", () => {
     render(<App />);
 
@@ -288,6 +360,11 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sources" }));
     expect(screen.getByRole("heading", { name: "Connect the work sources" })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Drafts" }));
+    expect(
+      screen.getByRole("heading", { name: "Edit reply drafts before they go back into Gmail" }),
+    ).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.getByRole("heading", { name: "Action lab" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Connect the work sources" })).not.toBeInTheDocument();
@@ -295,9 +372,9 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Privacy" }));
     expect(screen.getByRole("heading", { name: "Data guardrails" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "$200 plan" }));
-    expect(screen.getByRole("heading", { name: "Premium capabilities to justify the price" })).toBeInTheDocument();
-    expect(screen.getByText("Operator ROI dashboard")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    expect(screen.getByRole("heading", { name: "Feature overview across the workspace" })).toBeInTheDocument();
+    expect(screen.getByText("Editable reply drafts")).toBeInTheDocument();
   });
 
   it("exposes home, privacy, and terms links for verification pages", () => {

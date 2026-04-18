@@ -22,6 +22,7 @@ From code:
 - Google tokens are stored server-side in [`supabase/functions/store-google-connection/index.ts`](../supabase/functions/store-google-connection/index.ts).
 - Gmail snippets and calendar events are synced server-side in [`supabase/functions/sync-google-workspace/index.ts`](../supabase/functions/sync-google-workspace/index.ts).
 - Synced email and calendar context can be sent to the planner model in [`supabase/functions/plan-day/index.ts`](../supabase/functions/plan-day/index.ts).
+- Important synced email threads can be turned into editable reply drafts through [`supabase/functions/draft-email/index.ts`](../supabase/functions/draft-email/index.ts).
 
 That means the verification story must accurately describe:
 
@@ -29,6 +30,7 @@ That means the verification story must accurately describe:
 - Calendar event access
 - server-side token storage
 - AI planning using synced work context
+- API-backed draft generation for important threads without asking Google for Gmail send scopes
 
 ## The Important Domain Rule
 

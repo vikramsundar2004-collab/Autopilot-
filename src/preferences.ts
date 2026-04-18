@@ -7,6 +7,7 @@ export type WorkspacePageKey =
   | "daily"
   | "productivity"
   | "sources"
+  | "drafts"
   | "actions"
   | "customize"
   | "calendar"
@@ -60,6 +61,7 @@ export const defaultPageOrder: WorkspacePageKey[] = [
   "daily",
   "productivity",
   "sources",
+  "drafts",
   "actions",
   "customize",
   "calendar",

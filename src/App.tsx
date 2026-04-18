@@ -14,8 +14,20 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
+import {
+  extractDraftSearchTerm,
+  extractSenderEmails,
+  isDraftCommand,
+  parseAssistantCalendarCommand,
+} from "./assistantCommands";
 import { demoCalendar, demoDate, demoEmails } from "./data";
 import { loadManualCalendarEvents, saveManualCalendarEvents } from "./calendarStore";
+import {
+  deriveReplyDrafts,
+  isAdLikeEmail,
+  type DraftTheme,
+  type EmailReplyDraft,
+} from "./emailDrafts";
 import {
   buildBehaviorActions,
   buildShareStateUrl,
@@ -59,6 +71,7 @@ import {
 } from "./integrations/aiPrivacyApi";
 import { runDailyPlanner } from "./integrations/plannerApi";
 import { loadLatestPlannerOutput } from "./integrations/plannerData";
+import { generateReplyDraftsApi } from "./integrations/draftApi";
 import {
   getGoogleWorkspaceConnectionStatus,
   syncGoogleWorkspace,
@@ -106,10 +119,20 @@ import type {
 
 type TaskFilter = "all" | "urgent" | "waiting" | "done";
 type ImprovementFilter = "all" | ImprovementCapability;
+type AssistantMessageKind = "info" | "success" | "warning";
+
+interface AssistantMessage {
+  id: string;
+  kind: AssistantMessageKind;
+  title: string;
+  detail: string;
+}
+
 const appPages = [
   "daily",
   "productivity",
   "sources",
+  "drafts",
   "actions",
   "customize",
   "calendar",
@@ -118,15 +141,18 @@ const appPages = [
 ] as const;
 type AppPage = (typeof appPages)[number];
 
+const assistantSetupStorageKey = "autopilot-ai-assistant-setup";
+
 const pageLabels: Record<AppPage, string> = {
   daily: "Daily plan",
   productivity: "Productivity",
   sources: "Sources",
+  drafts: "Drafts",
   actions: "Actions",
   customize: "Customize",
   calendar: "Calendar",
   privacy: "Privacy",
-  premium: "$200 plan",
+  premium: "Overview",
 };
 
 const premiumFeatures = [
@@ -147,8 +173,13 @@ const premiumFeatures = [
   },
   {
     title: "Protected focus scheduling",
-    outcome: "Calendar-aware focus windows and rescue plans that protect expensive deep work.",
+    outcome: "Calendar-aware focus windows, manual blocks, and rescue plans that protect expensive deep work.",
     surface: "Productivity",
+  },
+  {
+    title: "Editable reply drafts",
+    outcome: "Important Gmail threads can become editable drafts with selectable themes before the user sends anything.",
+    surface: "Drafts",
   },
   {
     title: "Delegation and owner tracking",
@@ -176,15 +207,20 @@ const premiumFeatures = [
     surface: "Customize",
   },
   {
-    title: "Operator ROI dashboard",
-    outcome: "Quantify time saved, decisions unblocked, meetings protected, and urgent work resolved.",
-    surface: "$200 plan",
+    title: "Feature overview page",
+    outcome: "A single in-app page explains the current product surface so the user can see what is already live.",
+    surface: "Overview",
   },
 ] as const;
 
 function getInitialPage(): AppPage {
   const rawHash = window.location.hash.replace(/^#\/?/, "");
   return appPages.includes(rawHash as AppPage) ? (rawHash as AppPage) : "daily";
+}
+
+function loadAssistantSetupState(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(assistantSetupStorageKey) === "done";
 }
 
 const filterLabels: Record<TaskFilter, string> = {
@@ -587,6 +623,10 @@ function App() {
   const [calendarNotice, setCalendarNotice] = useState(
     "Tap the grid to add a block you control, or open one of your own items to move it.",
   );
+  const [draftNotice, setDraftNotice] = useState(
+    "Reply drafts are generated from important synced email and stay in the app until you copy them into Gmail.",
+  );
+  const [draftTheme, setDraftTheme] = useState<DraftTheme>("direct");
   const [connectionNotice, setConnectionNotice] = useState(
     "Add Supabase env vars when you are ready to test live OAuth.",
   );
@@ -617,6 +657,24 @@ function App() {
       ? "Preview mode has no live private senders to block."
       : "Block specific senders from AI before running planning on private email.",
   );
+  const [replyDraftEdits, setReplyDraftEdits] = useState<Record<string, string>>({});
+  const [apiReplyDrafts, setApiReplyDrafts] = useState<Record<string, { subject: string; body: string; reason: string }>>({});
+  const [isDraftApiLoading, setIsDraftApiLoading] = useState(false);
+  const [assistantSetupComplete, setAssistantSetupComplete] = useState(() =>
+    loadAssistantSetupState(),
+  );
+  const [assistantSenderInput, setAssistantSenderInput] = useState("");
+  const [assistantQuery, setAssistantQuery] = useState("");
+  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
+    {
+      id: "assistant-start",
+      kind: "info",
+      title: "Autopilot assistant is ready",
+      detail:
+        "Ask it to block private senders, add a calendar block, or generate a reply draft from synced Gmail.",
+    },
+  ]);
+  const [assistantFocusedDraftId, setAssistantFocusedDraftId] = useState<string | null>(null);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
   const [manualCalendarEvents, setManualCalendarEvents] = useState<CalendarEvent[]>(() =>
     loadManualCalendarEvents(),
@@ -626,6 +684,20 @@ function App() {
   const aiEligibleEmails = useMemo(
     () => filterAiBlockedEmails(workspaceEmails, aiSenderBlocks),
     [aiSenderBlocks, workspaceEmails],
+  );
+  const replyDraftBlueprints = useMemo(
+    () => deriveReplyDrafts(aiEligibleEmails, draftTheme),
+    [aiEligibleEmails, draftTheme],
+  );
+  const replyDrafts = useMemo(
+    () =>
+      replyDraftBlueprints.map((draft) => ({
+        ...draft,
+        subject: apiReplyDrafts[draft.sourceEmailId]?.subject ?? draft.subject,
+        reason: apiReplyDrafts[draft.sourceEmailId]?.reason ?? draft.reason,
+        body: replyDraftEdits[draft.id] ?? apiReplyDrafts[draft.sourceEmailId]?.body ?? draft.body,
+      })),
+    [apiReplyDrafts, replyDraftBlueprints, replyDraftEdits],
   );
   const visiblePlannerActionItems = useMemo(
     () => filterAiBlockedActions(plannerActionItems, aiSenderBlocks),
@@ -679,6 +751,10 @@ function App() {
     () => new Set(orderedTasks.map((task) => task.source)).size,
     [orderedTasks],
   );
+  const promotionalEmailCount = useMemo(
+    () => workspaceEmails.filter((email) => isAdLikeEmail(email)).length,
+    [workspaceEmails],
+  );
   const nextSprintTask = orderedTasks.find((task) => task.status === "open");
   const activeSprintTask =
     orderedTasks.find((task) => task.id === activeSprintId && task.status === "open") ??
@@ -730,6 +806,36 @@ function App() {
   useEffect(() => {
     saveManualCalendarEvents(manualCalendarEvents);
   }, [manualCalendarEvents]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      assistantSetupStorageKey,
+      assistantSetupComplete ? "done" : "pending",
+    );
+  }, [assistantSetupComplete]);
+
+  useEffect(() => {
+    const draftIds = new Set(replyDraftBlueprints.map((draft) => draft.id));
+    setReplyDraftEdits((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([draftId]) => draftIds.has(draftId)),
+      ),
+    );
+    const sourceIds = new Set(replyDraftBlueprints.map((draft) => draft.sourceEmailId));
+    setApiReplyDrafts((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([sourceMessageId]) => sourceIds.has(sourceMessageId)),
+      ),
+    );
+  }, [replyDraftBlueprints]);
+
+  useEffect(() => {
+    if (activePage !== "drafts") return;
+    if (replyDraftBlueprints.length === 0) return;
+
+    void generateApiReplyDrafts();
+  }, [activePage, draftTheme, replyDraftBlueprints]);
 
   async function refreshGoogleConnectionStatus() {
     const status = await getGoogleWorkspaceConnectionStatus();
@@ -1208,29 +1314,77 @@ function App() {
   }
 
   async function blockSenderFromAi(email: EmailMessage) {
-    const result = await blockAiSender({
-      provider: email.provider ?? "google",
-      senderEmail: email.senderEmail,
-      senderName: email.from,
-      reason: "Private sender",
-    });
-    setPrivacyControlNotice(result.message);
-    if (!result.ok || !result.block) return;
-
-    setAiSenderBlocks((current) => {
-      const next = current.filter((item) => item.id !== result.block?.id);
-      return [result.block!, ...next];
-    });
-    setPlannerNotice("Private sender blocked from AI. Re-run planning to rebuild the action list and schedule without that sender.");
+    await blockSenderAddressFromAi(
+      email.senderEmail,
+      email.from,
+      email.provider ?? "google",
+      "Private sender",
+    );
   }
 
   async function unblockSenderFromAi(block: AiSenderBlock) {
+    if (block.id.startsWith("local-")) {
+      setAiSenderBlocks((current) => current.filter((item) => item.id !== block.id));
+      setPrivacyControlNotice("The sender is allowed back into AI planning.");
+      setPlannerNotice("Sender restored for AI. Re-run planning to include that sender again.");
+      return;
+    }
+
     const result = await unblockAiSender(block.id);
     setPrivacyControlNotice(result.message);
     if (!result.ok) return;
 
     setAiSenderBlocks((current) => current.filter((item) => item.id !== block.id));
     setPlannerNotice("Sender restored for AI. Re-run planning to include that sender again.");
+  }
+
+  async function blockSenderAddressFromAi(
+    senderEmail: string | undefined,
+    senderName?: string,
+    provider = "google",
+    reason = "Private sender",
+  ): Promise<boolean> {
+    if (!senderEmail?.trim()) {
+      setPrivacyControlNotice("Add a valid sender email before blocking it from AI.");
+      return false;
+    }
+
+    const existingBlock = findAiSenderBlock(senderEmail, aiSenderBlocks);
+    if (existingBlock) {
+      setPrivacyControlNotice(`${existingBlock.senderName ?? existingBlock.senderEmail} is already blocked from AI.`);
+      return true;
+    }
+
+    const result = await blockAiSender({
+      provider,
+      senderEmail,
+      senderName,
+      reason,
+    });
+
+    if (result.ok && result.block) {
+      applyAiSenderBlock(result.block);
+      setPrivacyControlNotice(result.message);
+      setPlannerNotice("Private sender blocked from AI. Re-run planning to rebuild the action list and schedule without that sender.");
+      return true;
+    }
+
+    const localBlock = createLocalAiSenderBlock(senderEmail, senderName, provider, reason);
+    applyAiSenderBlock(localBlock);
+    setPrivacyControlNotice(
+      hasSupabaseConfig
+        ? `${localBlock.senderName ?? localBlock.senderEmail} is blocked locally while the privacy API is unavailable.`
+        : `${localBlock.senderName ?? localBlock.senderEmail} is blocked locally in preview mode.`,
+    );
+    setPlannerNotice("Private sender blocked from AI. Re-run planning to rebuild the action list and schedule without that sender.");
+    return true;
+  }
+
+  function applyAiSenderBlock(block: AiSenderBlock) {
+    setAiSenderBlocks((current) => {
+      const next = current.filter((item) => item.id !== block.id && item.senderEmail !== block.senderEmail);
+      return [block, ...next];
+    });
   }
 
   async function loginWithGoogle() {
@@ -1376,6 +1530,261 @@ function App() {
     recordMomentum("win", title, "Added or updated from the calendar workspace.");
   }
 
+  function saveManualCalendarEvent(details: {
+    title: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    type?: CalendarEventType;
+  }): boolean {
+    const title = details.title.trim();
+    if (!title) {
+      setCalendarNotice("Add a title before saving the calendar item.");
+      return false;
+    }
+
+    const start = buildCalendarIso(details.date, details.startTime);
+    const end = buildCalendarIso(details.date, details.endTime);
+    if (new Date(end).getTime() <= new Date(start).getTime()) {
+      setCalendarNotice("End time must be later than the start time.");
+      return false;
+    }
+
+    const savedEvent: CalendarEvent = {
+      id: `manual-${Date.now()}-${Math.round(Math.random() * 10_000)}`,
+      title,
+      start,
+      end,
+      type: details.type ?? "meeting",
+      provider: "manual",
+      editable: true,
+      attendees: [],
+    };
+
+    setManualCalendarEvents((current) =>
+      [...current, savedEvent].sort(
+        (left, right) => new Date(left.start).getTime() - new Date(right.start).getTime(),
+      ),
+    );
+    setCalendarNotice(`${title} saved to your editable calendar blocks.`);
+    recordMomentum("win", title, "Added from the assistant into the calendar workspace.");
+    return true;
+  }
+
+  function refreshReplyDrafts() {
+    setReplyDraftEdits({});
+    void generateApiReplyDrafts(true);
+  }
+
+  function updateReplyDraftBody(draftId: string, body: string) {
+    setReplyDraftEdits((current) => ({
+      ...current,
+      [draftId]: body,
+    }));
+    setDraftNotice("Draft updated locally. Copy it into Gmail when you are ready to send.");
+  }
+
+  function resetReplyDraftBody(draftId: string) {
+    setReplyDraftEdits((current) => {
+      const next = { ...current };
+      delete next[draftId];
+      return next;
+    });
+    setDraftNotice("Draft reset to the latest source-backed suggestion.");
+  }
+
+  async function copyReplyDraft(draft: EmailReplyDraft) {
+    const draftText = `${draft.subject}\n\n${draft.body}`;
+    const copied = await copyTextToClipboard(draftText);
+    setDraftNotice(
+      copied
+        ? "Draft copied. Open the source email and paste it into Gmail."
+        : "Clipboard copy failed. Open the source email and copy the draft text manually.",
+    );
+  }
+
+  async function generateApiReplyDrafts(forceMessage = false) {
+    if (replyDraftBlueprints.length === 0) {
+      setDraftNotice("No important non-promotional email needs a reply draft right now.");
+      return;
+    }
+
+    setIsDraftApiLoading(true);
+    const result = await generateReplyDraftsApi({
+      theme: draftTheme,
+      emails: replyDraftBlueprints.map((draft) => ({
+        id: draft.sourceEmailId,
+        from: draft.sender,
+        senderEmail: draft.senderEmail,
+        subject: draft.originalSubject,
+        preview: draft.preview,
+        priority: draft.priority,
+        category: draft.category,
+        actionHint: draft.reason,
+        labels: [],
+      })),
+    });
+    setIsDraftApiLoading(false);
+
+    if (result.ok && result.drafts.length > 0) {
+      setApiReplyDrafts(
+        Object.fromEntries(
+          result.drafts.map((draft) => [
+            draft.sourceMessageId,
+            {
+              subject: draft.subject,
+              body: draft.body,
+              reason: draft.reason,
+            },
+          ]),
+        ),
+      );
+      setDraftNotice(
+        forceMessage || result.source === "openai"
+          ? result.message
+          : `${replyDraftBlueprints.length} reply drafts ready.`,
+      );
+      return;
+    }
+
+    if (forceMessage || result.message) {
+      setDraftNotice(
+        result.message || "Draft API unavailable. Showing source-backed fallback drafts.",
+      );
+    }
+  }
+
+  function pushAssistantMessage(kind: AssistantMessageKind, title: string, detail: string) {
+    setAssistantMessages((current) => [
+      {
+        id: `${Date.now()}-${Math.round(Math.random() * 10_000)}`,
+        kind,
+        title,
+        detail,
+      },
+      ...current,
+    ].slice(0, 8));
+  }
+
+  async function saveAssistantSenderIntake() {
+    const senders = extractSenderEmails(assistantSenderInput);
+    if (senders.length === 0) {
+      setPrivacyControlNotice("Add at least one sender email before saving the privacy intake.");
+      pushAssistantMessage(
+        "warning",
+        "No sender emails detected",
+        "Add sender email addresses like payroll@company.com or finance@bank.com.",
+      );
+      return;
+    }
+
+    let blockedCount = 0;
+    for (const sender of senders) {
+      // Sequential on purpose so notice text stays deterministic and easier to follow.
+      const blocked = await blockSenderAddressFromAi(sender, undefined, "google", "Blocked during assistant setup");
+      if (blocked) {
+        blockedCount += 1;
+      }
+    }
+
+    setAssistantSetupComplete(true);
+    setAssistantSenderInput("");
+    pushAssistantMessage(
+      "success",
+      "Privacy setup saved",
+      `${blockedCount} sender${blockedCount === 1 ? "" : "s"} blocked from AI before planning starts.`,
+    );
+  }
+
+  async function runAssistantCommand(rawQuery: string) {
+    const query = rawQuery.trim();
+    if (!query) {
+      pushAssistantMessage(
+        "warning",
+        "Assistant needs a request",
+        "Try: block payroll@company.com, add calendar Deep work tomorrow 3pm to 4pm, or draft a reply for Northstar.",
+      );
+      return;
+    }
+
+    const senderMatches = extractSenderEmails(query);
+    if (/\b(block|hide|private)\b/i.test(query) && senderMatches.length > 0) {
+      let blockedCount = 0;
+      for (const sender of senderMatches) {
+        const blocked = await blockSenderAddressFromAi(sender, undefined, "google", "Blocked from assistant command");
+        if (blocked) blockedCount += 1;
+      }
+      pushAssistantMessage(
+        "success",
+        "Assistant updated AI privacy",
+        `${blockedCount} sender${blockedCount === 1 ? "" : "s"} blocked from AI planning.`,
+      );
+      return;
+    }
+
+    const calendarCommand = parseAssistantCalendarCommand(query, planningDate);
+    if (calendarCommand) {
+      const saved = saveManualCalendarEvent({
+        title: calendarCommand.title,
+        date: calendarCommand.date,
+        startTime: calendarCommand.startTime,
+        endTime: calendarCommand.endTime,
+        type: "focus",
+      });
+      if (saved) {
+        setPlanningDate(calendarCommand.date);
+        setActivePage("calendar");
+        pushAssistantMessage(
+          "success",
+          "Assistant added a calendar block",
+          `${calendarCommand.title} is on ${calendarCommand.date} from ${calendarCommand.startTime} to ${calendarCommand.endTime}.`,
+        );
+      }
+      return;
+    }
+
+    if (isDraftCommand(query)) {
+      await generateApiReplyDrafts();
+      const searchTerm = extractDraftSearchTerm(query).toLowerCase();
+      const matchedDraft =
+        replyDraftBlueprints.find((draft) => {
+          if (!searchTerm) return true;
+          const text = `${draft.sender} ${draft.originalSubject} ${draft.preview}`.toLowerCase();
+          return text.includes(searchTerm);
+        }) ?? replyDraftBlueprints[0];
+
+      if (matchedDraft) {
+        setAssistantFocusedDraftId(matchedDraft.id);
+        setActivePage("drafts");
+        setDraftNotice(`Draft ready for ${matchedDraft.sender}. Open it, edit it, and copy it into Gmail.`);
+        pushAssistantMessage(
+          "success",
+          "Assistant generated a draft",
+          `${matchedDraft.subject} is ready on the Drafts page with the ${draftTheme} theme.`,
+        );
+      } else {
+        pushAssistantMessage(
+          "warning",
+          "No draft candidate found",
+          "Sync Gmail first, or ask for a draft for a sender that has an important non-promotional email in the workspace.",
+        );
+      }
+      return;
+    }
+
+    pushAssistantMessage(
+      "info",
+      "Assistant needs a clearer command",
+      "It currently understands sender blocking, calendar additions, and reply draft generation.",
+    );
+  }
+
+  async function submitAssistantQuery(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    await runAssistantCommand(assistantQuery);
+    setAssistantQuery("");
+  }
+
   function applyWorkflowTemplate(template: WorkflowTemplate) {
     const task = createActionTask({
       title: template.title,
@@ -1498,6 +1907,20 @@ function App() {
                 <ArrowRight size={18} aria-hidden="true" />
               </button>
             </section>
+            <AssistantPanel
+              assistantMessages={assistantMessages}
+              draftTheme={draftTheme}
+              onAssistantQueryChange={setAssistantQuery}
+              onAssistantSubmit={submitAssistantQuery}
+              onQuickCommand={runAssistantCommand}
+              onDraftThemeChange={setDraftTheme}
+              onSaveSenderIntake={saveAssistantSenderIntake}
+              onSenderInputChange={setAssistantSenderInput}
+              query={assistantQuery}
+              senderInput={assistantSenderInput}
+              setupComplete={assistantSetupComplete}
+              blockedSenderCount={aiSenderBlocks.length}
+            />
             <RescuePlaybooksPanel
               activePlaybookIds={activatedPlaybookIds}
               notice={rescueNotice}
@@ -1577,6 +2000,30 @@ function App() {
               syncedEmails={workspaceEmails}
             />
             <SupabaseSetupPanel />
+          </>
+        );
+      case "drafts":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Drafts"
+              title="Edit reply drafts before they go back into Gmail"
+              body="Autopilot-AI drafts replies from important non-promotional email, lets the user pick a theme, and keeps every draft editable before anything is copied into Gmail."
+            />
+            <ReplyDraftsPage
+              drafts={replyDrafts}
+              draftTheme={draftTheme}
+              focusedDraftId={assistantFocusedDraftId}
+              isLoading={isDraftApiLoading}
+              notice={draftNotice}
+              promotionalEmailCount={promotionalEmailCount}
+              source={workspaceSource}
+              onCopyDraft={copyReplyDraft}
+              onDraftThemeChange={setDraftTheme}
+              onRefreshDrafts={refreshReplyDrafts}
+              onResetDraft={resetReplyDraftBody}
+              onUpdateDraft={updateReplyDraftBody}
+            />
           </>
         );
       case "actions":
@@ -1681,6 +2128,7 @@ function App() {
         return (
           <PremiumValuePage
             onOpenActions={() => navigate("actions")}
+            onOpenDrafts={() => navigate("drafts")}
             onOpenCalendar={() => navigate("calendar")}
             onOpenSources={() => navigate("sources")}
           />
@@ -1839,6 +2287,7 @@ function Sidebar({
     daily: <Inbox size={18} aria-hidden="true" />,
     productivity: <MailOpen size={18} aria-hidden="true" />,
     sources: <Link2 size={18} aria-hidden="true" />,
+    drafts: <MailOpen size={18} aria-hidden="true" />,
     actions: <SlidersHorizontal size={18} aria-hidden="true" />,
     customize: <Settings2 size={18} aria-hidden="true" />,
     calendar: <CalendarDays size={18} aria-hidden="true" />,
@@ -2197,7 +2646,7 @@ function SupabaseSetupPanel() {
         </article>
         <article>
           <strong>5. Deploy API functions</strong>
-          <p>Deploy `store-google-connection`, `sync-google-workspace`, `sync-microsoft-workspace`, and `plan-day`, then set Google, Microsoft, encryption, and OpenAI secrets.</p>
+          <p>Deploy `store-google-connection`, `sync-google-workspace`, `sync-microsoft-workspace`, `plan-day`, and `draft-email`, then set Google, Microsoft, encryption, and OpenAI secrets.</p>
         </article>
       </div>
     </section>
@@ -2235,29 +2684,299 @@ function SecurityReadinessPanel() {
   );
 }
 
+function AssistantPanel({
+  assistantMessages,
+  blockedSenderCount,
+  draftTheme,
+  onAssistantQueryChange,
+  onAssistantSubmit,
+  onQuickCommand,
+  onDraftThemeChange,
+  onSaveSenderIntake,
+  onSenderInputChange,
+  query,
+  senderInput,
+  setupComplete,
+}: {
+  assistantMessages: AssistantMessage[];
+  blockedSenderCount: number;
+  draftTheme: DraftTheme;
+  onAssistantQueryChange: (value: string) => void;
+  onAssistantSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onQuickCommand: (query: string) => Promise<void>;
+  onDraftThemeChange: (theme: DraftTheme) => void;
+  onSaveSenderIntake: () => void;
+  onSenderInputChange: (value: string) => void;
+  query: string;
+  senderInput: string;
+  setupComplete: boolean;
+}) {
+  return (
+    <section className="assistant-panel" aria-labelledby="assistant-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Assistant</span>
+          <h2 id="assistant-title">One place to steer privacy, drafts, and the calendar</h2>
+        </div>
+        <div className={setupComplete ? "status-pill ready" : "status-pill"}>
+          {setupComplete ? "Privacy intake saved" : "Needs privacy setup"}
+        </div>
+      </div>
+      <p className="section-note">
+        The assistant uses synced Gmail and calendar context, but it starts by asking which senders
+        you do not want AI to see.
+      </p>
+      {!setupComplete ? (
+        <div className="assistant-setup">
+          <label className="field-label">
+            Private sender emails to block before planning
+            <textarea
+              aria-label="Private sender emails"
+              placeholder="finance@bank.com&#10;payroll@company.com"
+              value={senderInput}
+              onChange={(event) => onSenderInputChange(event.target.value)}
+            />
+          </label>
+          <div className="button-row">
+            <button className="primary-action" type="button" onClick={onSaveSenderIntake}>
+              Save blocked senders
+            </button>
+            <span className="inline-help">
+              {blockedSenderCount} sender{blockedSenderCount === 1 ? "" : "s"} currently blocked
+              from AI.
+            </span>
+          </div>
+        </div>
+      ) : null}
+      <div className="assistant-command-grid">
+        <form className="assistant-command-form" onSubmit={onAssistantSubmit}>
+          <div className="assistant-guide">
+            <strong>First-win walkthrough</strong>
+            <p>Run one of these to see the assistant do real work immediately.</p>
+            <div className="button-row">
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() => void onQuickCommand("Draft a reply for Northstar")}
+              >
+                Generate a reply draft
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() => void onQuickCommand("Add calendar Deep work tomorrow 3pm to 4pm")}
+              >
+                Add a calendar block
+              </button>
+            </div>
+          </div>
+          <label className="field-label">
+            Ask Autopilot-AI
+            <input
+              aria-label="Assistant request"
+              placeholder="Block payroll@company.com, add calendar Deep work tomorrow 3pm to 4pm, or draft a reply for Northstar"
+              value={query}
+              onChange={(event) => onAssistantQueryChange(event.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            Draft theme
+            <select
+              aria-label="Assistant draft theme"
+              value={draftTheme}
+              onChange={(event) => onDraftThemeChange(event.target.value as DraftTheme)}
+            >
+              <option value="direct">Direct</option>
+              <option value="warm">Warm</option>
+              <option value="executive">Executive</option>
+            </select>
+          </label>
+          <div className="button-row">
+            <button className="primary-action" type="submit">
+              Run assistant
+            </button>
+          </div>
+        </form>
+        <div className="assistant-feed" aria-label="Assistant activity">
+          {assistantMessages.map((message) => (
+            <article className={`assistant-message ${message.kind}`} key={message.id}>
+              <strong>{message.title}</strong>
+              <p>{message.detail}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ReplyDraftsPage({
+  drafts,
+  draftTheme,
+  focusedDraftId,
+  isLoading,
+  notice,
+  promotionalEmailCount,
+  source,
+  onCopyDraft,
+  onDraftThemeChange,
+  onRefreshDrafts,
+  onResetDraft,
+  onUpdateDraft,
+}: {
+  drafts: EmailReplyDraft[];
+  draftTheme: DraftTheme;
+  focusedDraftId: string | null;
+  isLoading: boolean;
+  notice: string;
+  promotionalEmailCount: number;
+  source: WorkspaceDataSource;
+  onCopyDraft: (draft: EmailReplyDraft) => void;
+  onDraftThemeChange: (theme: DraftTheme) => void;
+  onRefreshDrafts: () => void;
+  onResetDraft: (draftId: string) => void;
+  onUpdateDraft: (draftId: string, body: string) => void;
+}) {
+  const sourceLabel =
+    isLoading
+      ? "Generating API drafts"
+      : source === "live"
+        ? "Live Gmail drafts"
+        : source === "demo"
+          ? "Preview drafts"
+          : "Waiting for Gmail sync";
+
+  return (
+    <>
+      <section className="setup-panel" aria-labelledby="reply-drafts-title">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Reply drafts</span>
+            <h2 id="reply-drafts-title">Important email gets a draft, but the user stays in control</h2>
+          </div>
+          <div className={drafts.length > 0 ? "status-pill ready" : "status-pill"}>{sourceLabel}</div>
+        </div>
+        <p className="section-note">{notice}</p>
+        <div className="setup-grid compact">
+          <article>
+            <strong>{drafts.length}</strong>
+            <p>drafts currently ready for important non-promotional email</p>
+          </article>
+          <article>
+            <strong>{promotionalEmailCount}</strong>
+            <p>promotional or newsletter emails ignored before draft generation</p>
+          </article>
+          <article>
+            <strong>{draftTheme}</strong>
+            <p>current draft theme applied across the draft workspace</p>
+          </article>
+          <article>
+            <strong>Editable</strong>
+            <p>every draft stays editable and copy-only until the user pastes it into Gmail</p>
+          </article>
+        </div>
+        <div className="button-row">
+          <label className="field-label inline-field">
+            Draft theme
+            <select
+              aria-label="Draft theme"
+              value={draftTheme}
+              onChange={(event) => onDraftThemeChange(event.target.value as DraftTheme)}
+            >
+              <option value="direct">Direct</option>
+              <option value="warm">Warm</option>
+              <option value="executive">Executive</option>
+            </select>
+          </label>
+          <button className="secondary-action" type="button" onClick={onRefreshDrafts}>
+            Refresh drafts
+          </button>
+        </div>
+      </section>
+      <section className="draft-list" aria-label="Draft list">
+        {drafts.length > 0 ? (
+          drafts.map((draft) => (
+            <article
+              className={draft.id === focusedDraftId ? "draft-card focused" : "draft-card"}
+              key={draft.id}
+            >
+              <div className="draft-card-header">
+                <div>
+                  <span className={`priority ${draft.priority}`}>{draft.priority}</span>
+                  <h3>{draft.originalSubject}</h3>
+                </div>
+                <span className="status-pill ready">{draft.reason}</span>
+              </div>
+              <p>{draft.preview}</p>
+              <div className="source-row">
+                <div>
+                  <strong>{draft.sender}</strong>
+                  <span>{draft.senderEmail ?? "Sender email unavailable"}</span>
+                </div>
+              </div>
+              <label className="field-label">
+                Reply subject
+                <input aria-label={`Draft subject for ${draft.originalSubject}`} readOnly value={draft.subject} />
+              </label>
+              <label className="field-label">
+                Draft body
+                <textarea
+                  aria-label={`Draft body for ${draft.originalSubject}`}
+                  value={draft.body}
+                  onChange={(event) => onUpdateDraft(draft.id, event.target.value)}
+                />
+              </label>
+              <div className="button-row">
+                {draft.sourceUrl ? (
+                  <a className="secondary-action" href={draft.sourceUrl} rel="noreferrer" target="_blank">
+                    Open source email
+                  </a>
+                ) : null}
+                <button className="secondary-action" type="button" onClick={() => onResetDraft(draft.id)}>
+                  Reset text
+                </button>
+                <button className="primary-action" type="button" onClick={() => onCopyDraft(draft)}>
+                  Copy draft
+                </button>
+              </div>
+            </article>
+          ))
+        ) : (
+          <article className="draft-card empty">
+            <strong>No draft replies are ready yet.</strong>
+            <p>Sync Gmail, then ask the assistant to generate a draft or open this page again.</p>
+          </article>
+        )}
+      </section>
+    </>
+  );
+}
+
 function PremiumValuePage({
   onOpenActions,
+  onOpenDrafts,
   onOpenCalendar,
   onOpenSources,
 }: {
   onOpenActions: () => void;
+  onOpenDrafts: () => void;
   onOpenCalendar: () => void;
   onOpenSources: () => void;
 }) {
   return (
     <>
       <PageHeader
-        eyebrow="$200/month value"
-        title="Make Autopilot-AI feel like an operator, not a task list"
-        body="The premium version needs to save executive time, reduce missed follow-ups, and make every platform feel like one command center."
+        eyebrow="Overview"
+        title="What this build already includes"
+        body="This page is the in-app feature overview, not pricing. It shows the capabilities already present in the product and where each one lives."
       />
       <section className="premium-panel" aria-labelledby="premium-title">
         <div className="section-heading">
           <div>
             <span className="eyebrow">Built into this version</span>
-            <h2 id="premium-title">Premium capabilities to justify the price</h2>
+            <h2 id="premium-title">Feature overview across the workspace</h2>
           </div>
-          <div className="status-pill ready">10 value drivers</div>
+          <div className="status-pill ready">Feature map</div>
         </div>
         <div className="premium-grid">
           {premiumFeatures.map((feature) => (
@@ -2272,6 +2991,9 @@ function PremiumValuePage({
       <section className="premium-actions" aria-label="Premium workflows">
         <button className="primary-action" type="button" onClick={onOpenSources}>
           Configure sources
+        </button>
+        <button className="secondary-action" type="button" onClick={onOpenDrafts}>
+          Open drafts
         </button>
         <button className="secondary-action" type="button" onClick={onOpenActions}>
           Test action engine
@@ -4239,6 +4961,53 @@ function addMinutesToTime(time: string, minutes: number): string {
   const hours = Math.floor(normalized / 60);
   const remainder = normalized % 60;
   return `${String(hours).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function createLocalAiSenderBlock(
+  senderEmail: string,
+  senderName?: string,
+  provider = "google",
+  reason = "Private sender",
+): AiSenderBlock {
+  return {
+    id: `local-${senderEmail.toLowerCase()}`,
+    provider,
+    senderEmail: senderEmail.trim().toLowerCase(),
+    senderName: senderName?.trim() || undefined,
+    reason,
+  };
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the textarea fallback below.
+  }
+
+  if (typeof document === "undefined") return false;
+
+  const element = document.createElement("textarea");
+  element.value = text;
+  element.setAttribute("readonly", "true");
+  element.style.position = "fixed";
+  element.style.opacity = "0";
+  document.body.appendChild(element);
+  element.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  } finally {
+    document.body.removeChild(element);
+  }
+
+  return copied;
 }
 
 export default App;

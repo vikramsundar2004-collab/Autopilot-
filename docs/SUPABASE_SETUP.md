@@ -77,6 +77,7 @@ supabase secrets set OPENAI_PLANNER_MODEL=gpt-5.4
 supabase functions deploy store-google-connection
 supabase functions deploy sync-google-workspace
 supabase functions deploy plan-day
+supabase functions deploy draft-email
 ```
 
 The `OPENAI_API_KEY` secret stays inside Supabase Edge Functions. Do not add it as a `VITE_` browser variable.
@@ -86,6 +87,8 @@ The first Google OAuth callback calls `store-google-connection`, which saves an 
 The app's Sources page has a `Sync Google data` button. It calls `sync-google-workspace` to store recent Gmail and today's Calendar rows using the saved Google connection.
 
 The app's Productivity page has a `Run AI planning API` button. It calls `plan-day` and shows the created action, schedule block, and approval counts.
+
+The app's Drafts page calls `draft-email` to turn important non-promotional email threads into editable reply drafts through the backend API path.
 
 ## 5. Configure Google OAuth
 

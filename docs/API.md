@@ -1,10 +1,11 @@
 # Autopilot-AI API
 
-The first backend slice uses two Supabase Edge Functions:
+The first backend slice uses four Supabase Edge Functions:
 
 - `store-google-connection` saves the user's Google access token and refresh token in an encrypted server-side vault after OAuth.
 - `sync-google-workspace` pulls recent Gmail metadata and today's Google Calendar events into Supabase.
 - `plan-day` turns stored or request-provided email and calendar signals into a daily action plan, schedule blocks, approval requests, audit events, and usage events.
+- `draft-email` turns important synced email context into editable reply drafts through the backend OpenAI API path.
 
 Users connect Google once. After that, sync reads the encrypted server-side connection. If the access token expires, the sync function refreshes it with the stored refresh token.
 
@@ -41,6 +42,15 @@ Users connect Google once. After that, sync reads the encrypted server-side conn
    - `approval_requests`
    - `audit_events`
    - `usage_events`
+
+`draft-email`:
+
+1. Verifies the caller with the Supabase user session bearer token.
+2. Accepts a small list of already-ranked important email threads from the browser client.
+3. Calls OpenAI's Responses API with structured JSON output when `OPENAI_API_KEY` is configured.
+4. Falls back to a deterministic local draft builder when OpenAI is not configured or fails.
+5. Returns editable reply drafts with a `direct`, `warm`, or `executive` tone.
+6. Does not send email and does not write into Gmail. The user still reviews and copies the final draft manually.
 
 ## Function Request
 
@@ -103,6 +113,48 @@ The app calls this from `src/integrations/workspaceSyncApi.ts` after Google OAut
 
 The browser client gets `providerAccessToken` from the active Supabase session and passes it directly to the Edge Function. The function uses it immediately and does not write it to the database.
 
+## Draft API Request
+
+The app calls this from `src/integrations/draftApi.ts`.
+
+```json
+{
+  "theme": "executive",
+  "emails": [
+    {
+      "id": "email-123",
+      "from": "Alex Morgan",
+      "senderEmail": "alex@example.com",
+      "subject": "Quarterly review follow-up",
+      "preview": "Can you confirm the next step and timeline?",
+      "priority": "high",
+      "category": "reply",
+      "actionHint": "Needs a reply with next steps.",
+      "labels": ["important"]
+    }
+  ]
+}
+```
+
+## Draft API Response
+
+```json
+{
+  "source": "openai",
+  "message": "Reply drafts generated with the API.",
+  "drafts": [
+    {
+      "sourceMessageId": "email-123",
+      "subject": "Re: Quarterly review follow-up",
+      "body": "Hi Alex,\n\nI am reviewing the next step now and will send a clear update shortly.\n\nRegards,\n[Your name]",
+      "reason": "High-priority reply draft."
+    }
+  ]
+}
+```
+
+If no OpenAI key is set, `source` is `fallback` and the function still returns usable editable drafts.
+
 ## Required Supabase Secrets
 
 Set these in Supabase, not in browser `.env` files:
@@ -125,6 +177,7 @@ supabase link --project-ref qwktgunwrasxthmssnxk
 supabase functions deploy store-google-connection
 supabase functions deploy sync-google-workspace
 supabase functions deploy plan-day
+supabase functions deploy draft-email
 ```
 
 Then run `supabase/schema.sql` in the Supabase SQL editor if you have not already applied it.
@@ -143,5 +196,5 @@ Then run `supabase/schema.sql` in the Supabase SQL editor if you have not alread
 
 - Background scheduled sync using the saved Google refresh token.
 - Slack, Microsoft, WhatsApp, and Notion ingestion through server-side token storage.
-- Generated draft replies and calendar-change proposals behind `approval_requests` are not implemented yet.
+- Direct Gmail draft creation, Gmail send actions, and Google Calendar write-back are not implemented yet.
 - Admin API for enterprise policy, audit export, retention, and seat management.

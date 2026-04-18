@@ -580,6 +580,7 @@ h3 {
 .full-calendar-section,
 .handoff-panel,
 .hidden-section-notice,
+.assistant-panel,
 .integration-panel,
 .improvement-section,
 .momentum-panel,
@@ -651,6 +652,7 @@ h3 {
 .integration-panel,
 .improvement-section,
 .handoff-panel,
+.assistant-panel,
 .customize-panel,
 .full-calendar-section,
 .hidden-section-notice,
@@ -859,6 +861,100 @@ h3 {
 .premium-actions .secondary-action {
   width: auto;
   margin-top: 0;
+}
+
+.assistant-panel,
+.draft-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.assistant-setup,
+.assistant-command-form,
+.assistant-feed,
+.draft-list {
+  display: grid;
+  gap: 12px;
+}
+
+.assistant-command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(260px, 0.7fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.assistant-message,
+.draft-card {
+  padding: 16px;
+}
+
+.assistant-message {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.assistant-message.success {
+  background: #f5fff9;
+}
+
+.assistant-message.warning {
+  background: #fff8f1;
+}
+
+.assistant-message p,
+.draft-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.assistant-guide {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.assistant-guide p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.draft-list {
+  margin-top: 20px;
+}
+
+.draft-card {
+  display: grid;
+  gap: 12px;
+}
+
+.draft-card.focused {
+  border-color: rgba(31, 138, 104, 0.45);
+  box-shadow: 0 0 0 2px rgba(31, 138, 104, 0.12);
+}
+
+.draft-card.empty {
+  background: #f8fafb;
+}
+
+.draft-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.draft-card-header h3 {
+  margin: 8px 0 0;
+}
+
+.inline-field {
+  width: min(220px, 100%);
 }
 
 .integration-card {
@@ -2585,6 +2681,7 @@ h3 {
   .playbook-grid,
   .premium-grid,
   .productivity-grid,
+  .assistant-command-grid,
   .capture-row,
   .planning-lists,
   .setup-grid,
@@ -2622,6 +2719,7 @@ h3 {
   }
 
   .sidebar,
+  .assistant-panel,
   .customize-panel,
   .full-calendar-section,
   .handoff-panel,
