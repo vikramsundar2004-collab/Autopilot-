@@ -12,6 +12,11 @@ export type IntegrationAuthKind =
   | "server-oauth"
   | "server-api";
 
+export type IntegrationRolloutStage =
+  | "live-now"
+  | "identity-only"
+  | "backend-required";
+
 export interface IntegrationProvider {
   key: IntegrationKey;
   name: string;
@@ -24,6 +29,9 @@ export interface IntegrationProvider {
   requiredSetup: string[];
   serverRequired: boolean;
   accent: "green" | "coral" | "yellow" | "blue" | "ink";
+  rolloutStage: IntegrationRolloutStage;
+  securityBoundary: string;
+  nextUnlock: string;
 }
 
 export const googleScopes = [
@@ -49,6 +57,9 @@ export const integrationProviders: IntegrationProvider[] = [
     ],
     serverRequired: false,
     accent: "green",
+    rolloutStage: "live-now",
+    securityBoundary: "Encrypted Google tokens stay in the backend vault; only message metadata is cached.",
+    nextUnlock: "Keep sync durable, then add explicit send-email approval later.",
   },
   {
     key: "slack",
@@ -67,6 +78,9 @@ export const integrationProviders: IntegrationProvider[] = [
     ],
     serverRequired: false,
     accent: "yellow",
+    rolloutStage: "identity-only",
+    securityBoundary: "Workspace identity can pass through Supabase OAuth, but message history needs a server token vault.",
+    nextUnlock: "Add a Slack server OAuth install plus ingestion routes for channels and DMs.",
   },
   {
     key: "whatsapp",
@@ -84,6 +98,9 @@ export const integrationProviders: IntegrationProvider[] = [
     ],
     serverRequired: true,
     accent: "coral",
+    rolloutStage: "backend-required",
+    securityBoundary: "WhatsApp tokens and webhook signing secrets must never enter browser config.",
+    nextUnlock: "Deploy signed webhook ingestion and map message threads into action sources.",
   },
   {
     key: "microsoft",
@@ -100,6 +117,9 @@ export const integrationProviders: IntegrationProvider[] = [
     ],
     serverRequired: true,
     accent: "blue",
+    rolloutStage: "backend-required",
+    securityBoundary: "Graph refresh tokens belong in the backend vault with reconnect state tracking.",
+    nextUnlock: "Add Microsoft OAuth exchange, durable token refresh, and Outlook sync mapping.",
   },
   {
     key: "notion",
@@ -116,6 +136,9 @@ export const integrationProviders: IntegrationProvider[] = [
     ],
     serverRequired: true,
     accent: "ink",
+    rolloutStage: "backend-required",
+    securityBoundary: "Notion access tokens stay server-side and workspace/database access stays explicit.",
+    nextUnlock: "Build the OAuth callback and map docs, projects, and databases into planner inputs.",
   },
 ];
 
@@ -134,4 +157,10 @@ export function getConnectionReadiness(
   if (provider.serverRequired) return "needs-server";
   if (!hasSupabaseConfig) return "needs-supabase";
   return "ready";
+}
+
+export function getRolloutLabel(stage: IntegrationRolloutStage): string {
+  if (stage === "live-now") return "Live now";
+  if (stage === "identity-only") return "Identity only";
+  return "Backend required";
 }

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.103.3";
 import { getAuthenticatedUser } from "../_shared/auth.ts";
+import { extractOpenAiText, normalizeOpenAiModel } from "../_shared/openai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -239,7 +240,7 @@ async function extractAssignmentsWithAiOrFallback(input: {
   organizationName: string;
 }) {
   const openAiKey = Deno.env.get("OPENAI_API_KEY");
-  const model = Deno.env.get("OPENAI_PLANNER_MODEL") ?? "gpt-5.4";
+  const model = normalizeOpenAiModel(Deno.env.get("OPENAI_PLANNER_MODEL"));
   if (!openAiKey) {
     return {
       source: "fallback",
@@ -294,7 +295,7 @@ async function extractAssignmentsWithAiOrFallback(input: {
     }
 
     const raw = await response.json();
-    const parsed = JSON.parse(extractText(raw));
+    const parsed = JSON.parse(extractOpenAiText(raw));
     return {
       source: "openai",
       assignments: normalizeAssignments(parsed?.assignments ?? []),
@@ -444,16 +445,6 @@ function titleFromAction(value: string) {
 function validIso(value: unknown) {
   const text = typeof value === "string" ? value.trim() : "";
   return text && !Number.isNaN(Date.parse(text)) ? new Date(text).toISOString() : null;
-}
-
-function extractText(raw: any): string {
-  if (typeof raw.output_text === "string") return raw.output_text;
-  for (const item of raw.output ?? []) {
-    for (const part of item.content ?? []) {
-      if (typeof part.text === "string") return part.text;
-    }
-  }
-  throw new Error("OpenAI response did not include text.");
 }
 
 function limit(value: string, maxLength: number) {

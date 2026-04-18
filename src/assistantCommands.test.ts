@@ -28,4 +28,15 @@ describe("assistantCommands", () => {
       endTime: "16:30",
     });
   });
+
+  it("parses shorthand end times that omit the second meridiem", () => {
+    expect(
+      parseAssistantCalendarCommand("Add calendar Interview prep tomorrow 11am to 1", "2026-04-17"),
+    ).toEqual({
+      title: "Interview prep",
+      date: "2026-04-18",
+      startTime: "11:00",
+      endTime: "13:00",
+    });
+  });
 });

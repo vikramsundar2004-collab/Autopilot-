@@ -5,6 +5,7 @@ export type EventBlockSize = "compact" | "comfortable" | "large";
 export type SidebarStyle = "full" | "compact" | "minimal";
 export type WorkspacePageKey =
   | "daily"
+  | "inbox"
   | "productivity"
   | "sources"
   | "drafts"
@@ -59,6 +60,7 @@ export const TUTORIAL_STORAGE_KEY = "autopilot-ai-tutorial";
 
 export const defaultPageOrder: WorkspacePageKey[] = [
   "daily",
+  "inbox",
   "productivity",
   "sources",
   "drafts",

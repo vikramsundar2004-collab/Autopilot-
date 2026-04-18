@@ -3,6 +3,9 @@ project_id = "qwktgunwrasxthmssnxk"
 [functions.store-google-connection]
 verify_jwt = false
 
+[functions.create-enterprise]
+verify_jwt = false
+
 [functions.sync-google-workspace]
 verify_jwt = false
 

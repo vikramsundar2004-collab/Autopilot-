@@ -256,28 +256,31 @@ export async function createEnterpriseOrganization(
     return { ok: false, message: "Enter a name for the enterprise." };
   }
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !user) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (sessionError || !accessToken) {
     return { ok: false, message: "Sign in before creating an enterprise." };
   }
 
-  const result = await supabase
-    .from("organizations")
-    .insert({ name: trimmedName, created_by: user.id, plan: "enterprise" })
-    .select("id, name, plan, join_key, created_by, created_at, updated_at")
-    .single();
+  const { data, error } = await invokeEdgeFunction<{
+    message?: string;
+    organization?: unknown;
+  }>("create-enterprise", {
+    accessToken,
+    body: { name: trimmedName },
+  });
 
-  if (result.error || !result.data) {
-    return { ok: false, message: result.error?.message ?? "Could not create the enterprise." };
+  if (error) {
+    return {
+      ok: false,
+      message: await describeFunctionError(error, "Could not create the enterprise."),
+    };
   }
 
   return {
     ok: true,
-    message: "Enterprise created.",
-    data: mapOrganization(result.data),
+    message: String(data?.message ?? "Enterprise created."),
+    data: data?.organization ? mapOrganization(data.organization) : undefined,
   };
 }
 

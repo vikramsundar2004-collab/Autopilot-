@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.103.3";
 import { getAuthenticatedUser } from "../_shared/auth.ts";
+import { extractOpenAiText, normalizeOpenAiModel } from "../_shared/openai.ts";
 
 type Priority = "urgent" | "high" | "medium" | "low";
 type Category = "reply" | "review" | "schedule" | "send" | "approve" | "follow-up";
@@ -187,7 +188,9 @@ function filterBlockedEmails(emails: any[], blockedSenderEmails: string[]) {
 
 async function planWithAiOrFallback(input: any) {
   const openAiKey = Deno.env.get("OPENAI_API_KEY");
-  const model = Deno.env.get("OPENAI_PLANNER_MODEL") ?? input.policy.ai_model ?? "gpt-5.4";
+  const model = normalizeOpenAiModel(
+    Deno.env.get("OPENAI_PLANNER_MODEL") ?? input.policy.ai_model,
+  );
   if (!openAiKey) {
     return {
       source: "fallback",
@@ -222,7 +225,7 @@ async function planWithAiOrFallback(input: any) {
     });
     if (!response.ok) throw new Error(`OpenAI ${response.status}: ${await response.text()}`);
     const raw = await response.json();
-    return { source: "openai", model, plan: normalizePlan(JSON.parse(extractText(raw)), input.date) };
+    return { source: "openai", model, plan: normalizePlan(JSON.parse(extractOpenAiText(raw)), input.date) };
   } catch (error) {
     return {
       source: "fallback",
@@ -562,16 +565,6 @@ function normalizePlan(plan: any, date: string) {
       })),
     enterpriseSignals: Array.isArray(plan.enterpriseSignals) ? plan.enterpriseSignals : [],
   };
-}
-
-function extractText(raw: any): string {
-  if (typeof raw.output_text === "string") return raw.output_text;
-  for (const item of raw.output ?? []) {
-    for (const part of item.content ?? []) {
-      if (typeof part.text === "string") return part.text;
-    }
-  }
-  throw new Error("OpenAI response did not include text.");
 }
 
 function defaultPolicy() {

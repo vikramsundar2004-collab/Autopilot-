@@ -34,25 +34,22 @@ export function parseAssistantCalendarCommand(
   const normalized = query.toLowerCase();
   if (!/\b(calendar|event|schedule|block|meeting)\b/.test(normalized)) return null;
 
-  const timeMatch =
-    query.match(
-      /(?:from\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:to|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i,
-    ) ??
-    query.match(
-      /(?:from\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i,
-    );
+  const timeMatch = query.match(
+    /(?:from\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:to|-|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i,
+  );
 
   if (!timeMatch) return null;
 
   const offset = normalized.includes("tomorrow") ? 1 : 0;
   const date = addDays(planningDate, offset);
   const startTime = toTwentyFourHour(timeMatch[1]!, timeMatch[2], timeMatch[3]!);
-  const endTime = toTwentyFourHour(timeMatch[4]!, timeMatch[5], timeMatch[6]!);
+  const endMeridiem = inferEndMeridiem(timeMatch[1]!, timeMatch[3]!, timeMatch[4]!, timeMatch[6]);
+  const endTime = toTwentyFourHour(timeMatch[4]!, timeMatch[5], endMeridiem);
 
   const title = query
     .replace(timeMatch[0], "")
     .replace(/\b(add|create|put|schedule|block)\b/gi, "")
-    .replace(/\bcalendar|event|meeting|for\b/gi, "")
+    .replace(/\bcalendar|event|meeting|for|at\b/gi, "")
     .replace(/\btoday|tomorrow\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -82,4 +79,21 @@ function toTwentyFourHour(hoursPart: string, minutesPart: string | undefined, me
   }
   const minutes = Number(minutesPart ?? "0");
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function inferEndMeridiem(
+  startHoursPart: string,
+  startMeridiem: string,
+  endHoursPart: string,
+  endMeridiem: string | undefined,
+): string {
+  if (endMeridiem) return endMeridiem;
+
+  const startHours = Number(startHoursPart) % 12 || 12;
+  const endHours = Number(endHoursPart) % 12 || 12;
+  if (startMeridiem.toLowerCase() === "am" && endHours < startHours) {
+    return "pm";
+  }
+
+  return startMeridiem;
 }

@@ -1,4 +1,5 @@
 import { getAuthenticatedUser } from "../_shared/auth.ts";
+import { extractOpenAiText, normalizeOpenAiModel } from "../_shared/openai.ts";
 
 type DraftTheme = "direct" | "warm" | "executive";
 type Priority = "urgent" | "high" | "medium" | "low";
@@ -35,7 +36,7 @@ Deno.serve(async (req) => {
   }
 
   const openAiKey = Deno.env.get("OPENAI_API_KEY");
-  const model = Deno.env.get("OPENAI_PLANNER_MODEL") ?? "gpt-5.4";
+  const model = normalizeOpenAiModel(Deno.env.get("OPENAI_PLANNER_MODEL"));
   if (!openAiKey) {
     return json({
       source: "fallback",
@@ -88,7 +89,7 @@ Deno.serve(async (req) => {
     }
 
     const raw = await response.json();
-    const parsed = JSON.parse(extractText(raw));
+    const parsed = JSON.parse(extractOpenAiText(raw));
     return json({
       source: "openai",
       message: "Reply drafts generated with the API.",
@@ -168,16 +169,6 @@ function normalizeDrafts(drafts: any[], emails: any[], theme: DraftTheme) {
       };
     })
     .filter(Boolean);
-}
-
-function extractText(raw: any): string {
-  if (typeof raw.output_text === "string") return raw.output_text;
-  for (const item of raw.output ?? []) {
-    for (const part of item.content ?? []) {
-      if (typeof part.text === "string") return part.text;
-    }
-  }
-  throw new Error("OpenAI response did not include text.");
 }
 
 function firstName(sender: string) {

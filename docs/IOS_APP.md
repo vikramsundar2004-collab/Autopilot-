@@ -23,6 +23,13 @@ You need a Mac for the native build step:
 
 Windows can build the web app and generate the iOS project files, but it cannot compile or run the iOS simulator.
 
+## Important Architecture Note
+
+- The current mobile app is a Capacitor iOS shell around the existing React web app.
+- It is not an Expo or React Native project.
+- If you want to test the current app on iOS, stay on the Capacitor path.
+- Moving this repo to Expo would be a separate mobile rewrite or wrapper project, not a small config change.
+
 ## Build On A Mac
 
 ```bash

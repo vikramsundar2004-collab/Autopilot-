@@ -86,7 +86,7 @@ describe("App", () => {
     expect(screen.getByText(/marked done from the focus sprint/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Run AI planning API"));
-    expect(await screen.findByText(/AI planning API failed:/)).toBeInTheDocument();
+    expect(await screen.findByText(/OpenAI planner unavailable\./)).toBeInTheDocument();
   });
 
   it("turns idea-improver themes into usable rescue playbooks and momentum", () => {
@@ -218,6 +218,25 @@ describe("App", () => {
       (screen.getByLabelText("Draft body for Escalation from Northstar Health") as HTMLTextAreaElement)
         .value,
     ).toBe("Custom reply body");
+  });
+
+  it("renders a dedicated inbox page with a readable message view and Gmail compose handoff", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Escalation from Northstar Health/i,
+      }),
+    );
+
+    expect(screen.getByRole("heading", { name: "Inbox command center" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Escalation from Northstar Health" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Inbox reply subject")).toHaveValue("Re: Escalation from Northstar Health");
+    expect(screen.getByRole("link", { name: "Open in Gmail to send" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("view=cm"),
+    );
   });
 
   it("uses the assistant to collect blocked senders before planning", async () => {
@@ -366,6 +385,9 @@ describe("App", () => {
 
   it("keeps every major surface on its own sidebar page", () => {
     render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
+    expect(screen.getByRole("heading", { name: "Inbox command center" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Sources" }));
     expect(screen.getByRole("heading", { name: "Connect the work sources" })).toBeInTheDocument();

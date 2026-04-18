@@ -6,6 +6,7 @@ export const demoEmails: EmailMessage[] = [
   {
     id: "email-board",
     from: "Maya Chen",
+    senderEmail: "maya@boardops.example.com",
     role: "Board operations",
     avatar:
       "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80",
@@ -26,6 +27,7 @@ export const demoEmails: EmailMessage[] = [
   {
     id: "email-vendor",
     from: "Noah Patel",
+    senderEmail: "noah@finance.example.com",
     role: "Finance",
     avatar:
       "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80",
@@ -46,6 +48,7 @@ export const demoEmails: EmailMessage[] = [
   {
     id: "email-candidate",
     from: "Ari Lopez",
+    senderEmail: "ari@talent.example.com",
     role: "Recruiting",
     avatar:
       "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=160&q=80",
@@ -66,6 +69,7 @@ export const demoEmails: EmailMessage[] = [
   {
     id: "email-launch",
     from: "Sam Rivera",
+    senderEmail: "sam@product.example.com",
     role: "Product",
     avatar:
       "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=160&q=80",
@@ -86,6 +90,7 @@ export const demoEmails: EmailMessage[] = [
   {
     id: "email-customer",
     from: "Priya Shah",
+    senderEmail: "priya@northstarhealth.com",
     role: "Customer success",
     avatar:
       "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=160&q=80",
@@ -106,6 +111,7 @@ export const demoEmails: EmailMessage[] = [
   {
     id: "email-legal",
     from: "Daniel Kim",
+    senderEmail: "daniel@legal.example.com",
     role: "Legal",
     avatar:
       "https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?auto=format&fit=crop&w=160&q=80",

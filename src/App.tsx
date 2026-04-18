@@ -24,6 +24,7 @@ import {
 import { demoCalendar, demoDate, demoEmails } from "./data";
 import { loadManualCalendarEvents, saveManualCalendarEvents } from "./calendarStore";
 import {
+  buildReplyDraft,
   deriveReplyDrafts,
   isAdLikeEmail,
   type DraftTheme,
@@ -106,6 +107,7 @@ import {
 } from "./integrations/workspaceData";
 import {
   getConnectionReadiness,
+  getRolloutLabel,
   integrationProviders,
   type IntegrationKey,
   type IntegrationProvider,
@@ -151,6 +153,7 @@ interface AssistantMessage {
 
 const appPages = [
   "daily",
+  "inbox",
   "productivity",
   "sources",
   "drafts",
@@ -166,6 +169,7 @@ const assistantSetupStorageKey = "autopilot-ai-assistant-setup";
 
 const pageLabels: Record<AppPage, string> = {
   daily: "Daily plan",
+  inbox: "Inbox",
   productivity: "Productivity",
   sources: "Sources",
   drafts: "Drafts",
@@ -946,6 +950,7 @@ function App() {
     },
   ]);
   const [assistantFocusedDraftId, setAssistantFocusedDraftId] = useState<string | null>(null);
+  const [selectedInboxEmailId, setSelectedInboxEmailId] = useState<string | null>(null);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
   const [manualCalendarEvents, setManualCalendarEvents] = useState<CalendarEvent[]>(() =>
     loadManualCalendarEvents(),
@@ -994,6 +999,20 @@ function App() {
         body: replyDraftEdits[draft.id] ?? apiReplyDrafts[draft.sourceEmailId]?.body ?? draft.body,
       })),
     [apiReplyDrafts, replyDraftBlueprints, replyDraftEdits],
+  );
+  const selectedInboxEmail = useMemo(
+    () =>
+      workspaceEmails.find((email) => email.id === selectedInboxEmailId) ??
+      workspaceEmails[0] ??
+      null,
+    [selectedInboxEmailId, workspaceEmails],
+  );
+  const selectedInboxDraft = useMemo(
+    () =>
+      selectedInboxEmail
+        ? buildEditableReplyDraft(selectedInboxEmail, draftTheme, apiReplyDrafts, replyDraftEdits)
+        : null,
+    [apiReplyDrafts, draftTheme, replyDraftEdits, selectedInboxEmail],
   );
   const visiblePlannerActionItems = useMemo(
     () => filterAiBlockedActions(plannerActionItems, aiSenderBlocks),
@@ -1072,6 +1091,14 @@ function App() {
     () => workspaceEmails.filter((email) => isAdLikeEmail(email)).length,
     [workspaceEmails],
   );
+
+  useEffect(() => {
+    setSelectedInboxEmailId((current) =>
+      workspaceEmails.some((email) => email.id === current)
+        ? current
+        : workspaceEmails[0]?.id ?? null,
+    );
+  }, [workspaceEmails]);
   const nextSprintTask = orderedTasks.find((task) => task.status === "open");
   const activeSprintTask =
     orderedTasks.find((task) => task.id === activeSprintId && task.status === "open") ??
@@ -2023,25 +2050,29 @@ function App() {
         .filter((event) => event.provider !== "planner")
         .map(buildPlannerCalendarPayload),
     });
+    if (!result.ok) {
+      setPlannerActionItems([]);
+      setPlannerCalendarEvents([]);
+      setPlannerNotice("OpenAI planner unavailable. Autopilot-AI is using local workspace intelligence for now.");
+      setProductivityNotice(`OpenAI planner unavailable. ${result.message} Using local workspace intelligence instead.`);
+      return;
+    }
+
     setProductivityNotice(
-      result.ok
-        ? `${result.message} ${result.actionCount ?? 0} actions, ${result.scheduleBlockCount ?? 0} schedule blocks, ${result.approvalCount ?? 0} approvals.`
-        : `AI planning API failed: ${result.message}`,
+      `${result.message} ${result.actionCount ?? 0} actions, ${result.scheduleBlockCount ?? 0} schedule blocks, ${result.approvalCount ?? 0} approvals.`,
     );
-    if (result.ok) {
-      const emailById = new Map(workspaceEmails.map((email) => [email.id, email]));
-      setPlannerActionItems(
-        result.actionItems.map((item, index) =>
-          mapPlannerActionToTask(item, item.sourceMessageId ? emailById.get(item.sourceMessageId) : undefined, index),
-        ),
-      );
-      setPlannerCalendarEvents(
-        result.scheduleBlocks.map((block, index) => mapPlannerBlockToCalendarEvent(block, index)),
-      );
-      setPlannerNotice(result.message);
-      if (result.persisted) {
-        await refreshPlannerOutput();
-      }
+    const emailById = new Map(workspaceEmails.map((email) => [email.id, email]));
+    setPlannerActionItems(
+      result.actionItems.map((item, index) =>
+        mapPlannerActionToTask(item, item.sourceMessageId ? emailById.get(item.sourceMessageId) : undefined, index),
+      ),
+    );
+    setPlannerCalendarEvents(
+      result.scheduleBlocks.map((block, index) => mapPlannerBlockToCalendarEvent(block, index)),
+    );
+    setPlannerNotice(result.message);
+    if (result.persisted) {
+      await refreshPlannerOutput();
     }
   }
 
@@ -2220,8 +2251,8 @@ function App() {
     const copied = await copyTextToClipboard(draftText);
     setDraftNotice(
       copied
-        ? "Draft copied. Open the source email and paste it into Gmail."
-        : "Clipboard copy failed. Open the source email and copy the draft text manually.",
+        ? "Draft copied. You can paste it into Gmail or open Gmail compose directly."
+        : "Clipboard copy failed. Open Gmail compose directly or copy the draft text manually.",
     );
   }
 
@@ -2378,7 +2409,7 @@ function App() {
       if (matchedDraft) {
         setAssistantFocusedDraftId(matchedDraft.id);
         setActivePage("drafts");
-        setDraftNotice(`Draft ready for ${matchedDraft.sender}. Open it, edit it, and copy it into Gmail.`);
+        setDraftNotice(`Draft ready for ${matchedDraft.sender}. Open it, edit it, and hand it off through Gmail compose.`);
         pushAssistantMessage(
           "success",
           "Assistant generated a draft",
@@ -2584,6 +2615,33 @@ function App() {
             )}
           </>
         );
+      case "inbox":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Inbox"
+              title="Read the message stream before you act"
+              body="Work through synced Gmail like an inbox, keep private senders out of AI when needed, and move from reading to drafting or Gmail compose without losing context."
+            />
+            <InboxPage
+              blockedSenders={aiSenderBlocks}
+              draftTheme={draftTheme}
+              emails={workspaceEmails}
+              notice={workspaceNotice}
+              promotionalEmailCount={promotionalEmailCount}
+              selectedDraft={selectedInboxDraft}
+              selectedEmail={selectedInboxEmail}
+              onBlockSender={blockSenderFromAi}
+              onCopyDraft={copyReplyDraft}
+              onDraftThemeChange={setDraftTheme}
+              onEmailSelect={setSelectedInboxEmailId}
+              onRefreshDrafts={() => void generateApiReplyDrafts(true)}
+              onResetDraft={resetReplyDraftBody}
+              onUnblockSender={unblockSenderFromAi}
+              onUpdateDraft={updateReplyDraftBody}
+            />
+          </>
+        );
       case "sources":
         return (
           <>
@@ -2630,7 +2688,7 @@ function App() {
             <PageHeader
               eyebrow="Drafts"
               title="Edit reply drafts before they go back into Gmail"
-              body="Autopilot-AI drafts replies from important non-promotional email, lets the user pick a theme, and keeps every draft editable before anything is copied into Gmail."
+              body="Autopilot-AI drafts replies from important non-promotional email, lets the user pick a theme, and keeps every draft editable before the user opens Gmail compose or copies the text."
             />
             <ReplyDraftsPage
               drafts={replyDrafts}
@@ -2760,6 +2818,7 @@ function App() {
             activeOrganizationId={activeEnterpriseId}
             assignments={enterpriseAssignments}
             createEnterpriseName={enterpriseCreateName}
+            currentUserId={authSession?.user.id ?? null}
             featureCards={premiumFeatures}
             isBusy={isEnterpriseLoading}
             joinKeyInput={enterpriseJoinKey}
@@ -2948,7 +3007,8 @@ function Sidebar({
   onSignOut?: () => void;
 }) {
   const navIcons: Record<AppPage, ReactNode> = {
-    daily: <Inbox size={18} aria-hidden="true" />,
+    daily: <Clock3 size={18} aria-hidden="true" />,
+    inbox: <Inbox size={18} aria-hidden="true" />,
     productivity: <MailOpen size={18} aria-hidden="true" />,
     sources: <Link2 size={18} aria-hidden="true" />,
     drafts: <MailOpen size={18} aria-hidden="true" />,
@@ -3136,6 +3196,59 @@ function IntegrationPanel({
             onConnect={onConnect}
           />
         ))}
+      </div>
+      <IntegrationRolloutPanel />
+    </section>
+  );
+}
+
+function IntegrationRolloutPanel() {
+  const supabaseCallbackUrl = buildSupabaseCallbackUrl();
+
+  return (
+    <section className="integration-rollout-panel" aria-labelledby="integration-rollout-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Rollout map</span>
+          <h3 id="integration-rollout-title">What is live now vs what still needs provider work</h3>
+        </div>
+        <div className="status-pill">
+          <Link2 size={15} aria-hidden="true" />
+          Secure by default
+        </div>
+      </div>
+      <div className="integration-rollout-grid">
+        {integrationProviders.map((provider) => (
+          <article className="integration-rollout-card" key={`rollout-${provider.key}`}>
+            <div className="integration-rollout-head">
+              <strong>{provider.name}</strong>
+              <span className="status-pill">{getRolloutLabel(provider.rolloutStage)}</span>
+            </div>
+            <p>{provider.nextUnlock}</p>
+            <div className="integration-rollout-copy">
+              <span>Security boundary</span>
+              <p>{provider.securityBoundary}</p>
+            </div>
+            <div className="integration-rollout-copy">
+              <span>First setup step</span>
+              <p>{provider.requiredSetup[0]}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="integration-rollout-footer">
+        <div className="integration-rollout-copy">
+          <span>Supabase OAuth callback</span>
+          <code>{supabaseCallbackUrl}</code>
+        </div>
+        <div className="integration-rollout-copy">
+          <span>Why the rollout is staged</span>
+          <p>
+            Google is live for read-only Gmail and Calendar metadata today. Slack identity can connect,
+            but real message ingestion, Microsoft Graph, Notion, and WhatsApp still require provider apps,
+            backend callbacks, and token vault handling before they are honest production features.
+          </p>
+        </div>
       </div>
     </section>
   );
@@ -3500,6 +3613,243 @@ function AssistantPanel({
   );
 }
 
+function InboxPage({
+  blockedSenders,
+  draftTheme,
+  emails,
+  notice,
+  promotionalEmailCount,
+  selectedDraft,
+  selectedEmail,
+  onBlockSender,
+  onCopyDraft,
+  onDraftThemeChange,
+  onEmailSelect,
+  onRefreshDrafts,
+  onResetDraft,
+  onUnblockSender,
+  onUpdateDraft,
+}: {
+  blockedSenders: AiSenderBlock[];
+  draftTheme: DraftTheme;
+  emails: EmailMessage[];
+  notice: string;
+  promotionalEmailCount: number;
+  selectedDraft: EmailReplyDraft | null;
+  selectedEmail: EmailMessage | null;
+  onBlockSender: (email: EmailMessage) => Promise<void>;
+  onCopyDraft: (draft: EmailReplyDraft) => void;
+  onDraftThemeChange: (theme: DraftTheme) => void;
+  onEmailSelect: (emailId: string) => void;
+  onRefreshDrafts: () => void;
+  onResetDraft: (draftId: string) => void;
+  onUnblockSender: (block: AiSenderBlock) => Promise<void>;
+  onUpdateDraft: (draftId: string, body: string) => void;
+}) {
+  const selectedSenderBlock =
+    selectedEmail?.senderEmail
+      ? findAiSenderBlock(selectedEmail.senderEmail, blockedSenders)
+      : null;
+  const composeUrl =
+    selectedDraft?.senderEmail
+      ? buildGmailComposeUrl(selectedDraft.senderEmail, selectedDraft.subject, selectedDraft.body)
+      : undefined;
+
+  return (
+    <>
+      <section className="setup-panel" aria-labelledby="inbox-title">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Inbox</span>
+            <h2 id="inbox-title">Inbox command center</h2>
+          </div>
+          <div className={emails.length > 0 ? "status-pill ready" : "status-pill"}>
+            {emails.length > 0 ? "Synced inbox ready" : "Waiting for sync"}
+          </div>
+        </div>
+        <p className="section-note">{notice}</p>
+        <div className="setup-grid compact">
+          <article>
+            <strong>{emails.length}</strong>
+            <p>messages visible in the inbox reader</p>
+          </article>
+          <article>
+            <strong>{blockedSenders.length}</strong>
+            <p>senders blocked from AI planning and drafting</p>
+          </article>
+          <article>
+            <strong>{promotionalEmailCount}</strong>
+            <p>promotional threads filtered from the curated draft workspace</p>
+          </article>
+          <article>
+            <strong>{draftTheme}</strong>
+            <p>reply tone used when the Gmail compose handoff is generated</p>
+          </article>
+        </div>
+        <div className="button-row">
+          <label className="field-label inline-field">
+            Inbox draft theme
+            <select
+              aria-label="Inbox draft theme"
+              value={draftTheme}
+              onChange={(event) => onDraftThemeChange(event.target.value as DraftTheme)}
+            >
+              <option value="direct">Direct</option>
+              <option value="warm">Warm</option>
+              <option value="executive">Executive</option>
+            </select>
+          </label>
+          <button className="secondary-action" type="button" onClick={onRefreshDrafts}>
+            Refresh AI drafts
+          </button>
+        </div>
+      </section>
+
+      <section className="inbox-layout" aria-label="Inbox workspace">
+        <div className="inbox-list-panel">
+          <div className="section-heading compact-heading">
+            <div>
+              <span className="eyebrow">Messages</span>
+              <h2>Read like Gmail</h2>
+            </div>
+          </div>
+          <div className="inbox-list" role="list" aria-label="Inbox message list">
+            {emails.length > 0 ? (
+              emails.map((email) => {
+                const isSelected = selectedEmail?.id === email.id;
+                const isBlocked =
+                  email.senderEmail ? Boolean(findAiSenderBlock(email.senderEmail, blockedSenders)) : false;
+                return (
+                  <button
+                    key={email.id}
+                    className={isSelected ? "inbox-message-row active" : "inbox-message-row"}
+                    onClick={() => onEmailSelect(email.id)}
+                    type="button"
+                  >
+                    <div className="inbox-message-topline">
+                      <strong>{email.from}</strong>
+                      <span>{formatInboxTimestamp(email.receivedAt)}</span>
+                    </div>
+                    <div className="inbox-message-subject">
+                      <span>{email.subject}</span>
+                      <span className={`priority ${email.priority}`}>{email.priority}</span>
+                    </div>
+                    <p>{email.preview}</p>
+                    <div className="label-row">
+                      {isBlocked ? <span className="mini-filter">blocked from AI</span> : null}
+                      {isAdLikeEmail(email) ? <span className="mini-filter">promo-like</span> : null}
+                      {email.labels.slice(0, 2).map((label) => (
+                        <span className="mini-filter" key={`${email.id}-${label}`}>
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <article className="draft-card empty">
+                <strong>No inbox messages are loaded yet.</strong>
+                <p>Sign in with Google and sync Gmail from Sources to view live mail here.</p>
+              </article>
+            )}
+          </div>
+        </div>
+
+        <article className="inbox-reader-panel" aria-labelledby="inbox-reader-title">
+          {selectedEmail && selectedDraft ? (
+            <>
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Reader</span>
+                  <h2 id="inbox-reader-title">{selectedEmail.subject}</h2>
+                </div>
+                <div className="label-row">
+                  <span className={`priority ${selectedEmail.priority}`}>{selectedEmail.priority}</span>
+                  <span className="mini-filter">{selectedEmail.category}</span>
+                  {selectedSenderBlock ? <span className="mini-filter">AI blocked</span> : null}
+                </div>
+              </div>
+              <div className="inbox-reader-meta">
+                <div>
+                  <strong>{selectedEmail.from}</strong>
+                  <span>{selectedEmail.senderEmail ?? "Sender email unavailable"}</span>
+                </div>
+                <span>{new Date(selectedEmail.receivedAt).toLocaleString()}</span>
+              </div>
+              <div className="inbox-reader-preview">
+                <h3>Message preview</h3>
+                <p>{selectedEmail.preview}</p>
+                <p>{selectedEmail.risk}</p>
+              </div>
+              <div className="button-row">
+                {selectedEmail.sourceUrl ? (
+                  <a className="secondary-action" href={selectedEmail.sourceUrl} rel="noreferrer" target="_blank">
+                    Open Gmail thread
+                  </a>
+                ) : null}
+                {selectedSenderBlock ? (
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    onClick={() => void onUnblockSender(selectedSenderBlock)}
+                  >
+                    Allow sender in AI
+                  </button>
+                ) : selectedEmail.senderEmail ? (
+                  <button className="secondary-action" type="button" onClick={() => void onBlockSender(selectedEmail)}>
+                    Block sender from AI
+                  </button>
+                ) : null}
+              </div>
+              <div className="inbox-reply-editor">
+                <div className="section-heading compact-heading">
+                  <div>
+                    <span className="eyebrow">Reply</span>
+                    <h3>Draft before sending</h3>
+                  </div>
+                </div>
+                <label className="field-label">
+                  Reply subject
+                  <input aria-label="Inbox reply subject" readOnly value={selectedDraft.subject} />
+                </label>
+                <label className="field-label">
+                  Reply body
+                  <textarea
+                    aria-label={`Inbox reply body for ${selectedEmail.subject}`}
+                    value={selectedDraft.body}
+                    onChange={(event) => onUpdateDraft(selectedDraft.id, event.target.value)}
+                  />
+                </label>
+                <div className="button-row">
+                  <button className="secondary-action" type="button" onClick={() => onResetDraft(selectedDraft.id)}>
+                    Reset text
+                  </button>
+                  <button className="secondary-action" type="button" onClick={() => onCopyDraft(selectedDraft)}>
+                    Copy draft
+                  </button>
+                  {composeUrl ? (
+                    <a className="primary-action" href={composeUrl} rel="noreferrer" target="_blank">
+                      Open in Gmail to send
+                    </a>
+                  ) : (
+                    <span className="inline-help">A sender email is required before Gmail compose can open.</span>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="draft-card empty">
+              <strong>Select a message to read it.</strong>
+              <p>Once you select a thread, Autopilot-AI shows the preview, AI privacy controls, and a Gmail-ready reply draft.</p>
+            </div>
+          )}
+        </article>
+      </section>
+    </>
+  );
+}
+
 function ReplyDraftsPage({
   drafts,
   draftTheme,
@@ -3562,7 +3912,7 @@ function ReplyDraftsPage({
           </article>
           <article>
             <strong>Editable</strong>
-            <p>every draft stays editable and copy-only until the user pastes it into Gmail</p>
+            <p>every draft stays editable until the user opens Gmail compose or copies it manually</p>
           </article>
         </div>
         <div className="button-row">
@@ -3628,6 +3978,16 @@ function ReplyDraftsPage({
                 <button className="primary-action" type="button" onClick={() => onCopyDraft(draft)}>
                   Copy draft
                 </button>
+                {draft.senderEmail ? (
+                  <a
+                    className="secondary-action"
+                    href={buildGmailComposeUrl(draft.senderEmail, draft.subject, draft.body)}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Open in Gmail to send
+                  </a>
+                ) : null}
               </div>
             </article>
           ))
@@ -4882,6 +5242,9 @@ function IntegrationCard({
           <span key={item}>{item}</span>
         ))}
       </div>
+      <div className="integration-stage-row">
+        <span className="status-pill">{getRolloutLabel(provider.rolloutStage)}</span>
+      </div>
       <p className="integration-detail">
         {readiness === "needs-server"
           ? `Backend route required. First setup step: ${provider.requiredSetup[0]}`
@@ -5026,9 +5389,11 @@ function FullCalendarSection({
   onSlotClick: (hour: number) => void;
 }) {
   const weekDays = buildWeekDays(date);
+  const miniMonthDays = buildMiniMonthDays(date);
   const hourHeight = eventSizeHourHeight[preferences.eventSize];
   const hours = buildCalendarHours(preferences.startHour, preferences.endHour);
   const gridHeight = hours.length * hourHeight;
+  const monthLabel = formatCalendarMonthYear(date);
 
   return (
     <section className="full-calendar-section" aria-labelledby="full-calendar-title">
@@ -5044,89 +5409,207 @@ function FullCalendarSection({
       </div>
 
       <div className="full-calendar-layout">
-        <div className="full-calendar-main">
-          <div className="calendar-toolbar">
-            <div className="button-row">
-              <button
-                type="button"
-                onClick={onJumpToToday}
-                disabled={date === getLocalDateISO()}
-              >
-                Today
-              </button>
-              <button type="button" onClick={onCreateDraft}>
-                New event
-              </button>
-            </div>
-            <span>
-              {preferences.startHour}:00 - {preferences.endHour}:00
-            </span>
-          </div>
-
-          <div className="calendar-week-strip large" aria-label="Week overview">
-            {weekDays.map((day) => (
-              <button
-                aria-label={`Open ${formatCalendarHeader(day.dateIso)}`}
-                className={day.isSelected ? "calendar-day active" : "calendar-day"}
-                key={day.key}
-                onClick={() => onSelectDate(day.dateIso)}
-                type="button"
-              >
-                <span>{day.weekday}</span>
-                <strong>{day.day}</strong>
-              </button>
-            ))}
-          </div>
-
-          <div
-            className={`calendar-day-grid full size-${preferences.eventSize}`}
-            aria-label="Daily calendar"
-            style={{ height: `${gridHeight}px` }}
-          >
-            {hours.map((hour) => (
-              <div
-                className="calendar-time-row"
-                key={hour}
-                style={{ height: `${hourHeight}px` }}
-              >
-                <span>{formatHourLabel(hour)}</span>
+        <aside className="calendar-left-rail">
+          <button className="calendar-create-button" type="button" onClick={onCreateDraft}>
+            Create
+          </button>
+          <section className="calendar-mini-month" aria-labelledby="calendar-mini-month-title">
+            <div className="calendar-mini-month-head">
+              <strong id="calendar-mini-month-title">{monthLabel}</strong>
+              <div className="button-row">
                 <button
-                  aria-label={`Add event at ${formatHourLabel(hour)}`}
-                  className="calendar-slot-button"
+                  aria-label="Open previous day"
+                  className="calendar-nav-button"
                   type="button"
-                  onClick={() => onSlotClick(hour)}
+                  onClick={() => onSelectDate(shiftDateIso(date, -1))}
                 >
-                  <span>Add</span>
+                  Prev
+                </button>
+                <button
+                  aria-label="Open next day"
+                  className="calendar-nav-button"
+                  type="button"
+                  onClick={() => onSelectDate(shiftDateIso(date, 1))}
+                >
+                  Next
                 </button>
               </div>
-            ))}
-            <div className="calendar-events-layer">
-              {events.map((event) => (
+            </div>
+            <div className="calendar-mini-weekdays" aria-hidden="true">
+              {["S", "M", "T", "W", "T", "F", "S"].map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+            <div className="calendar-mini-grid" aria-label="Mini month calendar">
+              {miniMonthDays.map((day) => (
                 <button
-                  aria-label={
-                    event.editable ? `Edit ${event.title}` : `View ${event.title}`
+                  className={
+                    day.isSelected
+                      ? "calendar-mini-day active"
+                      : day.isCurrentMonth
+                        ? "calendar-mini-day"
+                        : "calendar-mini-day muted"
                   }
-                  className={`calendar-event-block ${event.type}`}
-                  key={event.id}
+                  key={`${day.dateIso}-${day.day}`}
+                  onClick={() => onSelectDate(day.dateIso)}
                   type="button"
-                  onClick={() => onEditEvent(event)}
-                  style={{
-                    top: `${getCalendarEventTop(event, preferences.startHour, hourHeight)}px`,
-                    height: `${getCalendarEventHeight(
-                      event,
-                      preferences.startHour,
-                      preferences.endHour,
-                      hourHeight,
-                    )}px`,
-                  }}
                 >
-                  <strong>{event.title}</strong>
-                  <span>
-                    {formatTime(event.start)} - {formatTime(event.end)}
-                  </span>
-                  <small>{event.editable ? "Editable" : "Read only"}</small>
+                  {day.day}
                 </button>
               ))}
+            </div>
+          </section>
+          <section className="calendar-source-legend" aria-labelledby="calendar-source-title">
+            <div className="enterprise-section-line">
+              <strong id="calendar-source-title">Calendars in view</strong>
+              <span>Read only + editable</span>
+            </div>
+            <div className="calendar-legend-list">
+              <div className="calendar-legend-item">
+                <span className="calendar-legend-swatch google" aria-hidden="true" />
+                <strong>Google</strong>
+                <small>Read only inbox and event metadata</small>
+              </div>
+              <div className="calendar-legend-item">
+                <span className="calendar-legend-swatch manual" aria-hidden="true" />
+                <strong>Manual</strong>
+                <small>User-created editable blocks</small>
+              </div>
+              <div className="calendar-legend-item">
+                <span className="calendar-legend-swatch enterprise" aria-hidden="true" />
+                <strong>Enterprise</strong>
+                <small>Assignments captured from team chat</small>
+              </div>
+            </div>
+          </section>
+        </aside>
+
+        <div className="full-calendar-main">
+          <div className="calendar-toolbar calendar-toolbar-google">
+            <div className="calendar-toolbar-actions">
+              <div className="button-row">
+                <button
+                  className="calendar-nav-button"
+                  type="button"
+                  onClick={() => onSelectDate(shiftDateIso(date, -1))}
+                >
+                  Prev
+                </button>
+                <button
+                  className="calendar-nav-button"
+                  type="button"
+                  onClick={() => onSelectDate(shiftDateIso(date, 1))}
+                >
+                  Next
+                </button>
+              </div>
+              <div className="button-row">
+                <button
+                  type="button"
+                  onClick={onJumpToToday}
+                  disabled={date === getLocalDateISO()}
+                >
+                  Today
+                </button>
+                <button type="button" onClick={onCreateDraft}>
+                  New event
+                </button>
+              </div>
+            </div>
+            <div className="calendar-period-copy">
+              <strong>{monthLabel}</strong>
+              <span>{formatCalendarHeader(date)}</span>
+            </div>
+            <div className="calendar-range-chip">
+              <span>
+                {preferences.startHour}:00 - {preferences.endHour}:00
+              </span>
+            </div>
+          </div>
+
+          <div className="calendar-week-shell">
+            <div className="calendar-timezone-rail">GMT-07</div>
+            <div className="calendar-week-strip large" aria-label="Week overview">
+              {weekDays.map((day) => (
+                <button
+                  aria-label={`Open ${formatCalendarHeader(day.dateIso)}`}
+                  className={day.isSelected ? "calendar-day active" : "calendar-day"}
+                  key={day.key}
+                  onClick={() => onSelectDate(day.dateIso)}
+                  type="button"
+                >
+                  <span>{day.weekday}</span>
+                  <strong>{day.day}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="calendar-board">
+            <div className="calendar-board-head">
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={onCreateDraft}
+              >
+                Create event
+              </button>
+              <button className="secondary-action" type="button" onClick={() => void onQuickCommand("Add calendar Deep work tomorrow 3pm to 4pm")}>
+                Protect focus
+              </button>
+              <span>{formatCalendarHeader(date)}</span>
+            </div>
+
+            <div
+              className={`calendar-day-grid full size-${preferences.eventSize}`}
+              aria-label="Daily calendar"
+              style={{ height: `${gridHeight}px` }}
+            >
+              {hours.map((hour) => (
+                <div
+                  className="calendar-time-row"
+                  key={hour}
+                  style={{ height: `${hourHeight}px` }}
+                >
+                  <span>{formatHourLabel(hour)}</span>
+                  <button
+                    aria-label={`Add event at ${formatHourLabel(hour)}`}
+                    className="calendar-slot-button"
+                    type="button"
+                    onClick={() => onSlotClick(hour)}
+                  >
+                    <span>Add</span>
+                  </button>
+                </div>
+              ))}
+              <div className="calendar-events-layer">
+                {events.map((event) => (
+                  <button
+                    aria-label={
+                      event.editable ? `Edit ${event.title}` : `View ${event.title}`
+                    }
+                    className={`calendar-event-block ${event.type}`}
+                    key={event.id}
+                    type="button"
+                    onClick={() => onEditEvent(event)}
+                    style={{
+                      top: `${getCalendarEventTop(event, preferences.startHour, hourHeight)}px`,
+                      height: `${getCalendarEventHeight(
+                        event,
+                        preferences.startHour,
+                        preferences.endHour,
+                        hourHeight,
+                      )}px`,
+                    }}
+                  >
+                    <strong>{event.title}</strong>
+                    <span>
+                      {formatTime(event.start)} - {formatTime(event.end)}
+                    </span>
+                    <small>{event.editable ? "Editable" : "Read only"}</small>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -5652,6 +6135,24 @@ function buildWeekDays(dateISO: string) {
   });
 }
 
+function buildMiniMonthDays(dateISO: string) {
+  const current = new Date(`${dateISO}T12:00:00`);
+  const start = new Date(current.getFullYear(), current.getMonth(), 1);
+  start.setDate(start.getDate() - start.getDay());
+
+  return Array.from({ length: 35 }).map((_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    const dayDateIso = formatDateIso(day);
+    return {
+      dateIso: dayDateIso,
+      day: new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(day),
+      isCurrentMonth: day.getMonth() === current.getMonth(),
+      isSelected: dayDateIso === dateISO,
+    };
+  });
+}
+
 function formatCalendarHeader(dateISO: string): string {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -5660,10 +6161,23 @@ function formatCalendarHeader(dateISO: string): string {
   }).format(new Date(`${dateISO}T12:00:00`));
 }
 
+function formatCalendarMonthYear(dateISO: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${dateISO}T12:00:00`));
+}
+
 function formatHourLabel(hour: number): string {
   return new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
   }).format(new Date(2026, 0, 1, hour));
+}
+
+function shiftDateIso(dateISO: string, days: number): string {
+  const next = new Date(`${dateISO}T12:00:00`);
+  next.setDate(next.getDate() + days);
+  return formatDateIso(next);
 }
 
 function formatDateIso(date: Date): string {
@@ -5724,6 +6238,41 @@ function addMinutesToTime(time: string, minutes: number): string {
   return `${String(hours).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
+function buildEditableReplyDraft(
+  email: EmailMessage,
+  theme: DraftTheme,
+  apiDrafts: Record<string, { subject: string; body: string; reason: string }>,
+  draftEdits: Record<string, string>,
+): EmailReplyDraft {
+  const fallbackDraft = buildReplyDraft(email, theme);
+  const apiDraft = apiDrafts[email.id];
+  return {
+    ...fallbackDraft,
+    subject: apiDraft?.subject ?? fallbackDraft.subject,
+    reason: apiDraft?.reason ?? fallbackDraft.reason,
+    body: draftEdits[fallbackDraft.id] ?? apiDraft?.body ?? fallbackDraft.body,
+  };
+}
+
+function buildGmailComposeUrl(to: string, subject: string, body: string): string {
+  const url = new URL("https://mail.google.com/mail/u/0/");
+  url.searchParams.set("view", "cm");
+  url.searchParams.set("fs", "1");
+  url.searchParams.set("tf", "1");
+  url.searchParams.set("to", to);
+  url.searchParams.set("su", subject);
+  url.searchParams.set("body", body);
+  return url.toString();
+}
+
+function formatInboxTimestamp(value: string): string {
+  const date = new Date(value);
+  const sameDay = new Date().toDateString() === date.toDateString();
+  return sameDay
+    ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 function createLocalAiSenderBlock(
   senderEmail: string,
   senderName?: string,
@@ -5769,6 +6318,12 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 
   return copied;
+}
+
+function buildSupabaseCallbackUrl(): string {
+  const configuredUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+  const supabaseUrl = configuredUrl ? configuredUrl.replace(/\/$/, "") : "";
+  return supabaseUrl ? `${supabaseUrl}/auth/v1/callback` : "https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback";
 }
 
 export default App;
