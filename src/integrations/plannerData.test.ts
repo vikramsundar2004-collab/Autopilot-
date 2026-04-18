@@ -8,6 +8,7 @@ describe("planner data mapping", () => {
       source_external_id: "gmail-1",
       source_provider: "google",
       source_subject: "Board follow-up",
+      source_url: "https://mail.google.com/mail/u/0/#inbox/thread-123",
       source_sender_name: "Avery",
       source_sender_email: "avery@example.com",
       title: "Reply to Board follow-up",
@@ -28,6 +29,7 @@ describe("planner data mapping", () => {
 
     expect(item.sourceSenderEmail).toBe("avery@example.com");
     expect(item.source).toBe("Avery");
+    expect(item.sourceUrl).toBe("https://mail.google.com/mail/u/0/#inbox/thread-123");
     expect(item.requiresApproval).toBe(true);
     expect(item.effort).toBe(20);
   });

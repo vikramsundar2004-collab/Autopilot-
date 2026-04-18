@@ -169,6 +169,16 @@ describe("App", () => {
     expect(screen.getAllByText("10:00 AM - 11:30 AM").length).toBeGreaterThan(0);
   });
 
+  it("opens a visible calendar draft from the new-event button", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
+    fireEvent.click(screen.getByRole("button", { name: "New event" }));
+
+    expect(screen.getByRole("heading", { name: "Add a calendar item" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Calendar event title")).toBeInTheDocument();
+  });
+
   it("applies workflow templates as usable productivity shortcuts", () => {
     render(<App />);
 
@@ -293,14 +303,14 @@ describe("App", () => {
   it("exposes home, privacy, and terms links for verification pages", () => {
     render(<App />);
 
-    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "./home.html");
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/home.html");
     expect(screen.getByRole("link", { name: "Privacy policy" })).toHaveAttribute(
       "href",
-      "./privacy.html",
+      "/privacy.html",
     );
     expect(screen.getByRole("link", { name: "Terms & conditions" })).toHaveAttribute(
       "href",
-      "./terms.html",
+      "/terms.html",
     );
   });
 

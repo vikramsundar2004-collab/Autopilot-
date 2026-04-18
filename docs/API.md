@@ -143,5 +143,5 @@ Then run `supabase/schema.sql` in the Supabase SQL editor if you have not alread
 
 - Background scheduled sync using the saved Google refresh token.
 - Slack, Microsoft, WhatsApp, and Notion ingestion through server-side token storage.
-- Generated draft replies and calendar-change proposals behind `approval_requests`.
+- Generated draft replies and calendar-change proposals behind `approval_requests` are not implemented yet.
 - Admin API for enterprise policy, audit export, retention, and seat management.

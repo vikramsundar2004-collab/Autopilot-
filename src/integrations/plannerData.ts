@@ -21,6 +21,7 @@ interface ActionItemRow {
   source_external_id: string | null;
   source_provider: string | null;
   source_subject: string | null;
+  source_url: string | null;
   source_sender_name: string | null;
   source_sender_email: string | null;
   title: string;
@@ -87,6 +88,7 @@ export async function loadLatestPlannerOutput(
   let runQuery = supabase
     .from("plan_runs")
     .select("id, model, status, summary, input_counts, created_at")
+    .eq("user_id", sessionData.session.user.id)
     .eq("status", "completed")
     .order("created_at", { ascending: false })
     .limit(1);
@@ -113,13 +115,15 @@ export async function loadLatestPlannerOutput(
       supabase
         .from("action_items")
         .select(
-          "id, source_external_id, source_provider, source_subject, source_sender_name, source_sender_email, title, detail, due_at, priority, category, status, confidence, effort_minutes, impact, risk, labels, rank_score, requires_approval, created_at",
+          "id, source_external_id, source_provider, source_subject, source_url, source_sender_name, source_sender_email, title, detail, due_at, priority, category, status, confidence, effort_minutes, impact, risk, labels, rank_score, requires_approval, created_at",
         )
+        .eq("user_id", sessionData.session.user.id)
         .eq("plan_run_id", run.id)
         .order("rank_score", { ascending: false }),
       supabase
         .from("schedule_blocks")
         .select("id, title, detail, start_at, end_at, block_type")
+        .eq("user_id", sessionData.session.user.id)
         .eq("plan_run_id", run.id)
         .order("start_at", { ascending: true }),
     ]);
@@ -165,6 +169,7 @@ export function mapActionItemRow(row: ActionItemRow): ActionItem {
   return {
     id: row.id,
     sourceEmailId: row.source_external_id ?? row.id,
+    sourceUrl: row.source_url?.trim() || undefined,
     title: row.title,
     detail: row.detail ?? "Open the source thread and confirm the next action.",
     source: sourceLabel,

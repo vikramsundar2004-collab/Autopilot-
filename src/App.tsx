@@ -157,7 +157,7 @@ const premiumFeatures = [
   },
   {
     title: "Approval-gated automation",
-    outcome: "Draft replies, task changes, snoozes, and syncs are previewed before anything touches live accounts.",
+    outcome: "Reply approvals, task changes, snoozes, and syncs are staged before anything touches live accounts.",
     surface: "Actions",
   },
   {
@@ -954,6 +954,7 @@ function App() {
     source,
     sourceRole,
     sourceSubject,
+    sourceUrl,
     priority,
     category,
     effort,
@@ -966,6 +967,7 @@ function App() {
     source: string;
     sourceRole: string;
     sourceSubject: string;
+    sourceUrl?: string;
     priority: EmailPriority;
     category: TaskCategory;
     effort: number;
@@ -985,6 +987,7 @@ function App() {
       sourceAvatar:
         "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=160&q=80",
       sourceSubject,
+      sourceUrl,
       receivedAt: new Date().toISOString(),
       dueAt: `${planningDate}T${String(dueHour).padStart(2, "0")}:00:00`,
       priority,
@@ -1332,7 +1335,7 @@ function App() {
 
   function cancelCalendarDraft() {
     setCalendarDraft(null);
-    setCalendarNotice("Tap the grid to add a block you control, or open one of your own items to move it.");
+    setCalendarNotice("Create a new event, tap the grid, or open one of your own items to move it.");
   }
 
   function saveCalendarDraftItem() {
@@ -1641,6 +1644,10 @@ function App() {
               notice={calendarNotice}
               preferences={settings.calendar}
               onCancelDraft={cancelCalendarDraft}
+              onCreateDraft={() => {
+                startCalendarDraft(settings.calendar.startHour + 1);
+                setCalendarNotice("Drafting a new calendar block.");
+              }}
               onDraftChange={updateCalendarDraft}
               onEditEvent={selectCalendarEvent}
               onJumpToToday={() => setPlanningDate(getLocalDateISO())}
@@ -1806,9 +1813,9 @@ function LoginPage({
 function SiteLinks({ className }: { className?: string }) {
   return (
     <nav className={className ?? "site-links"} aria-label="Site links">
-      <a href="./home.html">Home</a>
-      <a href="./privacy.html">Privacy policy</a>
-      <a href="./terms.html">Terms &amp; conditions</a>
+      <a href="/home.html">Home</a>
+      <a href="/privacy.html">Privacy policy</a>
+      <a href="/terms.html">Terms &amp; conditions</a>
     </nav>
   );
 }
@@ -2086,6 +2093,16 @@ function WorkspaceSnapshotPanel({
             </span>
             <p>{email.preview}</p>
             <div className="source-proof-actions">
+              {email.sourceUrl ? (
+                <a
+                  className="secondary-action"
+                  href={email.sourceUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open Gmail thread
+                </a>
+              ) : null}
               {email.senderEmail ? (
                 senderBlock ? (
                   <button
@@ -3574,6 +3591,18 @@ function TaskCard({
             <span>{task.sourceSubject}</span>
           </div>
         </div>
+        {task.sourceUrl ? (
+          <div className="button-row">
+            <a
+              className="secondary-action"
+              href={task.sourceUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Open source email
+            </a>
+          </div>
+        ) : null}
         <div className="risk-note">
           <AlertTriangle size={16} aria-hidden="true" />
           {task.risk}
@@ -3590,6 +3619,7 @@ function FullCalendarSection({
   notice,
   preferences,
   onCancelDraft,
+  onCreateDraft,
   onDraftChange,
   onEditEvent,
   onJumpToToday,
@@ -3603,6 +3633,7 @@ function FullCalendarSection({
   notice: string;
   preferences: CalendarPreferences;
   onCancelDraft: () => void;
+  onCreateDraft: () => void;
   onDraftChange: (draft: Partial<CalendarDraft>) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onJumpToToday: () => void;
@@ -3631,13 +3662,18 @@ function FullCalendarSection({
       <div className="full-calendar-layout">
         <div className="full-calendar-main">
           <div className="calendar-toolbar">
-            <button
-              type="button"
-              onClick={onJumpToToday}
-              disabled={date === getLocalDateISO()}
-            >
-              Today
-            </button>
+            <div className="button-row">
+              <button
+                type="button"
+                onClick={onJumpToToday}
+                disabled={date === getLocalDateISO()}
+              >
+                Today
+              </button>
+              <button type="button" onClick={onCreateDraft}>
+                New event
+              </button>
+            </div>
             <span>
               {preferences.startHour}:00 - {preferences.endHour}:00
             </span>
@@ -3738,6 +3774,7 @@ function FullCalendarSection({
             draft={draft}
             notice={notice}
             onCancel={onCancelDraft}
+            onCreateDraft={onCreateDraft}
             onChange={onDraftChange}
             onSave={onSaveDraft}
           />
@@ -3751,12 +3788,14 @@ function CalendarDraftEditor({
   draft,
   notice,
   onCancel,
+  onCreateDraft,
   onChange,
   onSave,
 }: {
   draft: CalendarDraft | null;
   notice: string;
   onCancel: () => void;
+  onCreateDraft: () => void;
   onChange: (draft: Partial<CalendarDraft>) => void;
   onSave: () => void;
 }) {
@@ -3824,6 +3863,9 @@ function CalendarDraftEditor({
         <div className="calendar-editor-empty">
           <strong>Nothing selected yet</strong>
           <p>Tap a time row to add a user-controlled block, or open one of your own calendar items to change it.</p>
+          <button className="primary-action" type="button" onClick={onCreateDraft}>
+            Create new event
+          </button>
         </div>
       )}
     </section>

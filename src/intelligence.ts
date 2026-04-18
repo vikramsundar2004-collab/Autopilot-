@@ -29,6 +29,7 @@ export function deriveActionItems(
     return {
       id: `task-${email.id}`,
       sourceEmailId: email.id,
+      sourceUrl: email.sourceUrl,
       title: email.actionHint,
       detail: email.preview,
       source: email.from,

@@ -77,12 +77,14 @@ export async function loadWorkspaceData(
 
   const { dayStartIso, dayEndIso } = buildLocalDayRange(date);
 
+  const userId = sessionData.session.user.id;
   const [emailsResult, calendarResult] = await Promise.all([
     supabase
       .from("email_messages")
       .select(
         "id, provider, provider_message_id, thread_id, from_name, from_email, subject, snippet, body_preview, received_at, labels, importance",
       )
+      .eq("user_id", userId)
       .order("received_at", { ascending: false })
       .limit(options.emailLimit ?? defaultEmailLimit),
     supabase
@@ -90,6 +92,7 @@ export async function loadWorkspaceData(
       .select(
         "id, provider, provider_event_id, title, description, location, start_at, end_at, event_type, attendees",
       )
+      .eq("user_id", userId)
       .lt("start_at", dayEndIso)
       .gt("end_at", dayStartIso)
       .order("start_at", { ascending: true })
@@ -186,6 +189,7 @@ export function mapEmailRowToMessage(
     id: row.provider_message_id || row.id,
     from: senderName,
     senderEmail: row.from_email?.trim() || undefined,
+    sourceUrl: buildSourceUrl(row.provider, row.thread_id, row.provider_message_id || row.id),
     role: inferSenderRole(row.from_email, row.provider),
     avatar: buildAvatarDataUri(senderName, row.provider),
     subject,
@@ -406,4 +410,10 @@ function formatWorkspaceDate(date: string): string {
     month: "short",
     day: "numeric",
   }).format(new Date(`${date}T00:00:00`));
+}
+
+function buildSourceUrl(provider: string, threadId: string | null, messageId: string): string | undefined {
+  if (provider !== "google") return undefined;
+  const safeThreadId = threadId?.trim() || messageId.trim();
+  return safeThreadId ? `https://mail.google.com/mail/u/0/#inbox/${encodeURIComponent(safeThreadId)}` : undefined;
 }

@@ -32,9 +32,13 @@ export interface GoogleWorkspaceConnectionStatus {
 
 export async function getGoogleWorkspaceConnectionStatus(): Promise<GoogleWorkspaceConnectionStatus> {
   if (!supabase) return { connected: false };
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
+  if (sessionError || !userId) return { connected: false };
   const { data, error } = await supabase
     .from("connected_accounts")
     .select("status")
+    .eq("user_id", userId)
     .eq("provider", "google")
     .eq("status", "connected")
     .limit(1);
@@ -55,6 +59,9 @@ export async function syncGoogleWorkspace(
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
     return { ok: false, message: sessionError.message };
+  }
+  if (!sessionData.session) {
+    return { ok: false, message: "Sign in before syncing Google Workspace." };
   }
 
   const session = sessionData.session as (typeof sessionData.session & { provider_token?: string }) | null;

@@ -264,6 +264,7 @@ async function persistPlan(supabase: any, input: any) {
       source_external_id: email?.providerMessageId ?? item.sourceMessageId,
       source_thread_id: email?.threadId ?? null,
       source_subject: email?.subject ?? null,
+      source_url: buildSourceUrl(email),
       source_sender_name: email?.fromName ?? null,
       source_sender_email: email?.fromEmail ?? null,
       title: item.title,
@@ -585,6 +586,12 @@ function actionVerb(category: Category): string {
     approve: "Approve or decide on",
     "follow-up": "Follow up on",
   }[category];
+}
+
+function buildSourceUrl(email: any) {
+  if (!email || email.provider !== "google") return null;
+  const threadId = String(email.threadId ?? email.providerMessageId ?? "").trim();
+  return threadId ? `https://mail.google.com/mail/u/0/#inbox/${encodeURIComponent(threadId)}` : null;
 }
 
 function priorityWeight(priority: Priority): number {

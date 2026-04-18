@@ -4,7 +4,7 @@
 - **What this is:** A productivity command center that turns email and calendar signals into a clean daily action plan.
 - **Who it is for:** Busy professionals who lose track of commitments buried in inbox threads.
 - **Project type:** Web app dashboard.
-- **Current product boundary:** Mock data only with Supabase OAuth scaffolding. No live Gmail, Calendar, Slack message, WhatsApp, database persistence, or pricing flow in this version.
+- **Current product boundary:** Live Google Workspace sync for Gmail metadata/snippets and Calendar events, plus planner persistence and privacy controls. Slack, WhatsApp, Microsoft write actions, and pricing/billing flows are still not live.
 
 ## Aesthetic Direction
 - **Direction:** Editorial utility.

@@ -39,6 +39,7 @@ describe("workspaceData", () => {
     expect(message.actionHint).toBe("Approve: Approval needed: analytics renewal");
     expect(message.risk).toContain("Source-backed");
     expect(message.priority).toBe("high");
+    expect(message.sourceUrl).toBe("https://mail.google.com/mail/u/0/#inbox/thread-1");
   });
 
   it("marks waiting threads as waiting instead of pretending they are ready to execute", () => {

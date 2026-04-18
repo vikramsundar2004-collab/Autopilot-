@@ -13,6 +13,7 @@ export interface EmailMessage {
   id: string;
   from: string;
   senderEmail?: string;
+  sourceUrl?: string;
   role: string;
   avatar: string;
   subject: string;
@@ -47,6 +48,7 @@ export interface CalendarEvent {
 export interface ActionItem {
   id: string;
   sourceEmailId: string;
+  sourceUrl?: string;
   title: string;
   detail: string;
   source: string;

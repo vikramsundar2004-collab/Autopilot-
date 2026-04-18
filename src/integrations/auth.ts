@@ -34,6 +34,7 @@ export async function startIntegrationConnection(
   }
 
   const { data: sessionData } = await supabase.auth.getSession();
+  const session = sessionData.session;
   const oauthOptions =
     provider.key === "google"
       ? buildGoogleWorkspaceOAuthOptions(provider)
@@ -47,8 +48,16 @@ export async function startIntegrationConnection(
   };
 
   rememberPendingOAuthIntent(provider.key === "google" ? "google-workspace" : key);
+  const shouldRefreshGoogleScopes =
+    provider.key === "google" &&
+    Boolean(
+      session &&
+        (session.user.app_metadata.provider === "google" ||
+          session.user.app_metadata.providers?.includes("google") ||
+          session.user.identities?.some((identity) => identity.provider === "google")),
+    );
   const { error } =
-    sessionData.session && provider.key === "google"
+    session && !shouldRefreshGoogleScopes
       ? await supabase.auth.linkIdentity(oauthCredentials)
       : await supabase.auth.signInWithOAuth(oauthCredentials);
 
@@ -149,6 +158,13 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     return { ok: false, message: error.message };
+  }
+  if (pendingIntent === "google-workspace" && !data.session?.provider_token) {
+    return {
+      ok: false,
+      message:
+        "Google Workspace sign-in finished, but Google did not return a provider token for Gmail and Calendar. Reconnect Google Workspace and confirm the Gmail readonly and Calendar readonly consent screen.",
+    };
   }
 
   if (window.location.pathname.includes("/auth/callback")) {
