@@ -46,6 +46,9 @@ Deno.serve(async (req) => {
   const emails = Array.isArray(body.emails)
     ? body.emails
     : await loadEmails(supabase, userId, policy.max_email_messages ?? 50);
+  const blockedSenderEmails = await loadAiSenderBlocks(supabase, userId);
+  const planningEmails = filterBlockedEmails(emails, blockedSenderEmails);
+  const blockedEmailCount = Math.max(0, emails.length - planningEmails.length);
   const events =
     Array.isArray(body.calendarEvents)
       ? body.calendarEvents
@@ -59,7 +62,12 @@ Deno.serve(async (req) => {
       run_date: date,
       timezone,
       status: "pending",
-      input_counts: { emails: emails.length, calendarEvents: events.length },
+      input_counts: {
+        emails: planningEmails.length,
+        totalEmails: emails.length,
+        blockedEmails: blockedEmailCount,
+        calendarEvents: events.length,
+      },
     })
     .select("id")
     .single();
@@ -69,7 +77,7 @@ Deno.serve(async (req) => {
     date,
     timezone,
     planningMode: body.planningMode ?? "impact",
-    emails: sanitizeEmails(emails, policy),
+    emails: sanitizeEmails(planningEmails, policy),
     events,
     policy,
   });
@@ -79,9 +87,10 @@ Deno.serve(async (req) => {
     organizationId,
     planRunId: run.id,
     plan: planned.plan,
-    emails,
+    emails: planningEmails,
     source: planned.source,
     model: planned.model,
+    blockedEmailCount,
   });
   if (!persisted.ok) {
     await supabase
@@ -96,6 +105,7 @@ Deno.serve(async (req) => {
     source: planned.source,
     model: planned.model,
     fallbackReason: planned.fallbackReason,
+    blockedEmailCount,
     ...planned.plan,
     persisted,
   });
@@ -117,6 +127,17 @@ async function loadPolicy(supabase: any, organizationId: string | null) {
     .eq("organization_id", organizationId)
     .maybeSingle();
   return data ?? defaultPolicy();
+}
+
+async function loadAiSenderBlocks(supabase: any, userId: string) {
+  const { data, error } = await supabase
+    .from("ai_sender_blocks")
+    .select("sender_email")
+    .eq("user_id", userId);
+  if (error) return [] as string[];
+  return (data ?? [])
+    .map((row: any) => String(row.sender_email ?? "").trim().toLowerCase())
+    .filter(Boolean);
 }
 
 async function loadEmails(supabase: any, userId: string, limit: number) {
@@ -174,9 +195,18 @@ function sanitizeEmails(emails: any[], policy: any) {
   }));
 }
 
+function filterBlockedEmails(emails: any[], blockedSenderEmails: string[]) {
+  if (blockedSenderEmails.length === 0) return emails;
+  const blocked = new Set(blockedSenderEmails.map((senderEmail) => senderEmail.trim().toLowerCase()));
+  return emails.filter((email) => {
+    const senderEmail = String(email.fromEmail ?? "").trim().toLowerCase();
+    return senderEmail ? !blocked.has(senderEmail) : true;
+  });
+}
+
 async function planWithAiOrFallback(input: any) {
   const openAiKey = Deno.env.get("OPENAI_API_KEY");
-  const model = Deno.env.get("OPENAI_PLANNER_MODEL") ?? input.policy.ai_model ?? "gpt-5-mini";
+  const model = Deno.env.get("OPENAI_PLANNER_MODEL") ?? input.policy.ai_model ?? "gpt-5.4";
   if (!openAiKey) {
     return {
       source: "fallback",
@@ -234,6 +264,8 @@ async function persistPlan(supabase: any, input: any) {
       source_external_id: email?.providerMessageId ?? item.sourceMessageId,
       source_thread_id: email?.threadId ?? null,
       source_subject: email?.subject ?? null,
+      source_sender_name: email?.fromName ?? null,
+      source_sender_email: email?.fromEmail ?? null,
       title: item.title,
       detail: item.detail,
       due_at: item.dueAt,
@@ -313,7 +345,12 @@ async function persistPlan(supabase: any, input: any) {
     organization_id: input.organizationId,
     event_type: "ai_plan_run",
     quantity: 1,
-    metadata: { source: input.source, model: input.model, emailCount: input.emails.length },
+    metadata: {
+      source: input.source,
+      model: input.model,
+      emailCount: input.emails.length,
+      blockedEmailCount: input.blockedEmailCount ?? 0,
+    },
   });
 
   return { ok: true, actionCount: actions.length, scheduleBlockCount: blocks.length, approvalCount: approvals.length };
@@ -513,7 +550,7 @@ function extractText(raw: any): string {
 
 function defaultPolicy() {
   return {
-    ai_model: "gpt-5-mini",
+    ai_model: "gpt-5.4",
     max_email_messages: 50,
     max_calendar_events: 100,
     require_approval_for_sending: true,

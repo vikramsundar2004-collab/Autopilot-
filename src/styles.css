@@ -806,6 +806,28 @@ h3 {
   line-height: 1.5;
 }
 
+.source-proof-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.source-proof-actions {
+  margin-top: 6px;
+}
+
+.source-proof-actions .secondary-action {
+  width: auto;
+  margin-top: 0;
+}
+
+.blocked-sender-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
 .template-meta {
   display: flex;
   flex-wrap: wrap;

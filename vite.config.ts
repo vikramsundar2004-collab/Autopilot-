@@ -1,8 +1,9 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
-export default defineConfig({
-  base: "./",
+export default defineConfig(({ mode }) => ({
+  // Capacitor needs relative assets inside the app bundle. Hosted web deploys do not.
+  base: mode === "ios" ? "./" : "/",
   plugins: [react()],
   build: {
     target: "es2020",
@@ -22,4 +23,4 @@ export default defineConfig({
     globals: true,
     setupFiles: "./src/test/setup.ts",
   },
-});
+}));

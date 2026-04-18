@@ -73,7 +73,7 @@ supabase secrets set TOKEN_ENCRYPTION_KEY=GENERATE_A_32_PLUS_CHARACTER_RANDOM_SE
 supabase secrets set GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
 supabase secrets set GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
 supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
-supabase secrets set OPENAI_PLANNER_MODEL=gpt-5-mini
+supabase secrets set OPENAI_PLANNER_MODEL=gpt-5.4
 supabase functions deploy store-google-connection
 supabase functions deploy sync-google-workspace
 supabase functions deploy plan-day

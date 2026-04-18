@@ -31,7 +31,7 @@ Users connect Google once. After that, sync reads the encrypted server-side conn
 
 1. Verifies the caller with the Supabase user session bearer token.
 2. Loads enterprise policy for the organization, when supplied.
-3. Loads recent `email_messages` and same-day `calendar_events`, unless test payload data is passed directly.
+3. Loads recent `email_messages`, removes any sender blocked from AI privacy controls, and loads same-day `calendar_events`, unless test payload data is passed directly.
 4. Calls OpenAI's Responses API with structured JSON output when `OPENAI_API_KEY` is configured.
 5. Falls back to deterministic planning logic when OpenAI is not configured or fails.
 6. Persists:
@@ -63,7 +63,8 @@ For local API tests before provider ingestion exists, you can also pass `emails`
 {
   "planRunId": "uuid",
   "source": "openai",
-  "model": "gpt-5-mini",
+  "model": "gpt-5.4",
+  "blockedEmailCount": 1,
   "summary": {
     "headline": "5 action items planned, 1 urgent.",
     "brief": "Autopilot-AI ranked the inbox and scheduled focus time.",
@@ -111,7 +112,7 @@ supabase secrets set TOKEN_ENCRYPTION_KEY=GENERATE_A_32_PLUS_CHARACTER_RANDOM_SE
 supabase secrets set GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
 supabase secrets set GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_CLIENT_SECRET
 supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
-supabase secrets set OPENAI_PLANNER_MODEL=gpt-5-mini
+supabase secrets set OPENAI_PLANNER_MODEL=gpt-5.4
 ```
 
 `OPENAI_PLANNER_MODEL` is optional. Keep it configurable so the product can move to a stronger or cheaper model without code changes.
@@ -136,6 +137,7 @@ Then run `supabase/schema.sql` in the Supabase SQL editor if you have not alread
 - Audit event trail for compliance.
 - Usage events for future metering and pricing.
 - Message-body processing disabled by default. The default policy uses snippets unless an organization explicitly enables body preview processing.
+- Private-sender AI blocks so a user can exclude specific Gmail senders from action extraction and planning.
 
 ## Next Backend Slices
 

@@ -72,7 +72,16 @@
             <div class="legal-callout">
               <strong>Purpose limitation</strong>
               <p class="site-copy">
-                Google data is used to provide user-requested productivity features such as reading messages, identifying actionable threads, and reflecting calendar context in the daily plan.
+                Google data is used to provide user-requested productivity features such as reading
+                Gmail message metadata and snippets, identifying actionable threads, and reflecting
+                calendar context in the daily plan.
+              </p>
+            </div>
+            <div class="legal-callout">
+              <strong>Server-side connection storage</strong>
+              <p class="site-copy">
+                Autopilot-AI stores provider connection tokens behind server-side controls so the
+                user does not need to reconnect Google every time the workspace syncs.
               </p>
             </div>
             <div class="legal-callout">
@@ -88,6 +97,17 @@
               </p>
             </div>
           </div>
+        </section>
+
+        <section class="site-section" aria-labelledby="google-details-title">
+          <h2 id="google-details-title">How Google Workspace data is handled in the current product</h2>
+          <ul class="site-list">
+            <li>Recent Gmail messages are synced using sender, subject, labels, received time, and snippet-level preview data used for task extraction and ranking.</li>
+            <li>Google Calendar events are synced to reflect meeting timing, availability, and scheduling context inside the planner.</li>
+            <li>Connected-provider tokens are stored server-side with encryption-oriented controls so authorized syncing can continue after sign-in.</li>
+            <li>When a user explicitly runs AI planning, synced email and calendar context can be processed by the configured model provider to generate the requested plan output.</li>
+            <li>Google Workspace data is used for user-facing productivity features, not for advertising or sale of user data.</li>
+          </ul>
         </section>
 
         <section class="site-section" aria-labelledby="sharing-title">

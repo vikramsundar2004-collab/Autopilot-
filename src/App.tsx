@@ -48,7 +48,17 @@ import {
   startGoogleLogin,
   startIntegrationConnection,
 } from "./integrations/auth";
+import {
+  blockAiSender,
+  filterAiBlockedActions,
+  filterAiBlockedEmails,
+  findAiSenderBlock,
+  loadAiSenderBlocks,
+  unblockAiSender,
+  type AiSenderBlock,
+} from "./integrations/aiPrivacyApi";
 import { runDailyPlanner } from "./integrations/plannerApi";
+import { loadLatestPlannerOutput } from "./integrations/plannerData";
 import {
   getGoogleWorkspaceConnectionStatus,
   syncGoogleWorkspace,
@@ -594,26 +604,50 @@ function App() {
   const [workspaceCalendarEvents, setWorkspaceCalendarEvents] = useState<CalendarEvent[]>(
     previewMode ? demoCalendar : [],
   );
+  const [plannerActionItems, setPlannerActionItems] = useState<ActionItem[]>([]);
+  const [plannerCalendarEvents, setPlannerCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [plannerNotice, setPlannerNotice] = useState(
+    previewMode
+      ? "Preview mode uses local planning logic until live Gmail and Calendar are connected."
+      : "Run the AI planner after syncing Gmail and Calendar to load a saved plan.",
+  );
+  const [aiSenderBlocks, setAiSenderBlocks] = useState<AiSenderBlock[]>([]);
+  const [privacyControlNotice, setPrivacyControlNotice] = useState(
+    previewMode
+      ? "Preview mode has no live private senders to block."
+      : "Block specific senders from AI before running planning on private email.",
+  );
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
   const [manualCalendarEvents, setManualCalendarEvents] = useState<CalendarEvent[]>(() =>
     loadManualCalendarEvents(),
   );
   const [calendarDraft, setCalendarDraft] = useState<CalendarDraft | null>(null);
 
+  const aiEligibleEmails = useMemo(
+    () => filterAiBlockedEmails(workspaceEmails, aiSenderBlocks),
+    [aiSenderBlocks, workspaceEmails],
+  );
+  const visiblePlannerActionItems = useMemo(
+    () => filterAiBlockedActions(plannerActionItems, aiSenderBlocks),
+    [aiSenderBlocks, plannerActionItems],
+  );
   const visibleManualCalendarEvents = useMemo(
     () => manualCalendarEvents.filter((event) => localDateFromIso(event.start) === planningDate),
     [manualCalendarEvents, planningDate],
   );
   const calendarEvents = useMemo(
     () =>
-      [...workspaceCalendarEvents, ...visibleManualCalendarEvents].sort(
+      [...workspaceCalendarEvents, ...plannerCalendarEvents, ...visibleManualCalendarEvents].sort(
         (left, right) => new Date(left.start).getTime() - new Date(right.start).getTime(),
       ),
-    [visibleManualCalendarEvents, workspaceCalendarEvents],
+    [plannerCalendarEvents, visibleManualCalendarEvents, workspaceCalendarEvents],
   );
   const baseTasks = useMemo(
-    () => deriveActionItems(workspaceEmails, planningDate),
-    [planningDate, workspaceEmails],
+    () =>
+      visiblePlannerActionItems.length > 0
+        ? visiblePlannerActionItems
+        : deriveActionItems(aiEligibleEmails, planningDate),
+    [aiEligibleEmails, planningDate, visiblePlannerActionItems],
   );
   const tasks = useMemo(
     () =>
@@ -723,6 +757,45 @@ function App() {
     setIsWorkspaceLoading(false);
   }
 
+  async function refreshPlannerOutput() {
+    if (previewMode && !authSession) {
+      setPlannerActionItems([]);
+      setPlannerCalendarEvents([]);
+      setPlannerNotice("Preview mode uses local task extraction until a live AI plan is saved.");
+      return;
+    }
+
+    if (!authSession && !previewMode) {
+      setPlannerActionItems([]);
+      setPlannerCalendarEvents([]);
+      setPlannerNotice("Run the AI planner after syncing Gmail and Calendar to load a saved plan.");
+      return;
+    }
+
+    const result = await loadLatestPlannerOutput({ date: planningDate });
+    setPlannerActionItems(result.actionItems);
+    setPlannerCalendarEvents(result.scheduleBlocks);
+    setPlannerNotice(result.message);
+  }
+
+  async function refreshAiPrivacyControls() {
+    if (previewMode && !authSession) {
+      setAiSenderBlocks([]);
+      setPrivacyControlNotice("Preview mode has no live private senders to block.");
+      return;
+    }
+
+    if (!authSession && !previewMode) {
+      setAiSenderBlocks([]);
+      setPrivacyControlNotice("Sign in to block private senders from AI planning.");
+      return;
+    }
+
+    const result = await loadAiSenderBlocks();
+    setAiSenderBlocks(result.blocks);
+    setPrivacyControlNotice(result.message);
+  }
+
   useEffect(() => {
     if (!authRequired || !supabase) return undefined;
 
@@ -756,6 +829,8 @@ function App() {
 
   useEffect(() => {
     void refreshWorkspaceData();
+    void refreshPlannerOutput();
+    void refreshAiPrivacyControls();
   }, [authSession, planningDate, previewMode]);
 
   useEffect(() => {
@@ -1122,8 +1197,37 @@ function App() {
     );
     if (result.ok) {
       setIsGoogleConnected(true);
+      setPlannerActionItems([]);
+      setPlannerCalendarEvents([]);
+      setPlannerNotice("Google sync completed. Run the AI planner again to rebuild the Gmail-backed action list.");
       await refreshWorkspaceData();
     }
+  }
+
+  async function blockSenderFromAi(email: EmailMessage) {
+    const result = await blockAiSender({
+      provider: email.provider ?? "google",
+      senderEmail: email.senderEmail,
+      senderName: email.from,
+      reason: "Private sender",
+    });
+    setPrivacyControlNotice(result.message);
+    if (!result.ok || !result.block) return;
+
+    setAiSenderBlocks((current) => {
+      const next = current.filter((item) => item.id !== result.block?.id);
+      return [result.block!, ...next];
+    });
+    setPlannerNotice("Private sender blocked from AI. Re-run planning to rebuild the action list and schedule without that sender.");
+  }
+
+  async function unblockSenderFromAi(block: AiSenderBlock) {
+    const result = await unblockAiSender(block.id);
+    setPrivacyControlNotice(result.message);
+    if (!result.ok) return;
+
+    setAiSenderBlocks((current) => current.filter((item) => item.id !== block.id));
+    setPlannerNotice("Sender restored for AI. Re-run planning to include that sender again.");
   }
 
   async function loginWithGoogle() {
@@ -1145,6 +1249,9 @@ function App() {
     if (result.ok) {
       setAuthSession(null);
       setIsGoogleConnected(false);
+      setPlannerActionItems([]);
+      setPlannerCalendarEvents([]);
+      setAiSenderBlocks([]);
     }
   }
 
@@ -1160,6 +1267,9 @@ function App() {
         ? `${result.message} ${result.actionCount ?? 0} actions, ${result.scheduleBlockCount ?? 0} schedule blocks, ${result.approvalCount ?? 0} approvals.`
         : `AI planning API failed: ${result.message}`,
     );
+    if (result.ok) {
+      await refreshPlannerOutput();
+    }
   }
 
   function navigate(page: AppPage) {
@@ -1451,8 +1561,15 @@ function App() {
             )}
             <WorkspaceSnapshotPanel
               calendarEvents={calendarEvents}
+              blockedSenders={aiSenderBlocks}
+              filteredEmailCount={aiEligibleEmails.length}
               isLoading={isWorkspaceLoading}
               notice={workspaceNotice}
+              onBlockSender={blockSenderFromAi}
+              onUnblockSender={unblockSenderFromAi}
+              plannerActionCount={visiblePlannerActionItems.length}
+              plannerNotice={plannerNotice}
+              privacyNotice={privacyControlNotice}
               source={workspaceSource}
               syncedEmails={workspaceEmails}
             />
@@ -1880,14 +1997,28 @@ function IntegrationPanel({
 
 function WorkspaceSnapshotPanel({
   calendarEvents,
+  blockedSenders,
+  filteredEmailCount,
   isLoading,
   notice,
+  onBlockSender,
+  onUnblockSender,
+  plannerActionCount,
+  plannerNotice,
+  privacyNotice,
   source,
   syncedEmails,
 }: {
   calendarEvents: CalendarEvent[];
+  blockedSenders: AiSenderBlock[];
+  filteredEmailCount: number;
   isLoading: boolean;
   notice: string;
+  onBlockSender: (email: EmailMessage) => void;
+  onUnblockSender: (block: AiSenderBlock) => void;
+  plannerActionCount: number;
+  plannerNotice: string;
+  privacyNotice: string;
   source: WorkspaceDataSource;
   syncedEmails: EmailMessage[];
 }) {
@@ -1907,34 +2038,82 @@ function WorkspaceSnapshotPanel({
         </div>
       </div>
       <p className="section-note">{notice}</p>
+      <p className="inline-help">{plannerNotice}</p>
+      <p className="inline-help">{privacyNotice}</p>
       <div className="setup-grid compact">
         <article>
           <strong>{syncedEmails.length}</strong>
-          <p>source-backed emails currently in the planning set</p>
+          <p>source-backed emails currently synced into the workspace</p>
+        </article>
+        <article>
+          <strong>{filteredEmailCount}</strong>
+          <p>emails currently eligible for AI after private sender blocks</p>
         </article>
         <article>
           <strong>{calendarEvents.length}</strong>
           <p>calendar events visible in the day view</p>
         </article>
         <article>
+          <strong>{plannerActionCount}</strong>
+          <p>
+            {source === "live"
+              ? "AI actions currently loaded back from the latest saved planner run."
+              : "AI planner output stays empty until a real source is connected and synced."}
+          </p>
+        </article>
+        <article>
+          <strong>{blockedSenders.length}</strong>
+          <p>private senders blocked from AI planning</p>
+        </article>
+        <article>
           <strong>{source === "live" ? "No fake tasks" : "Preview only"}</strong>
           <p>
             {source === "live"
-              ? "Action items are derived from synced message metadata and keep a visible source trail."
+              ? "Gmail sync is real, and planner-backed tasks keep a visible source trail."
               : "The app only shows demo tasks until a real source is connected and synced."}
           </p>
         </article>
       </div>
       <div className="source-proof-list" aria-label="Recent synced email threads">
-        {syncedEmails.slice(0, 4).map((email) => (
-          <article className="source-proof-card" key={email.id}>
+        {syncedEmails.slice(0, 4).map((email) => {
+          const senderBlock = findAiSenderBlock(email.senderEmail, blockedSenders);
+
+          return (
+            <article className="source-proof-card" key={email.id}>
             <strong>{email.subject}</strong>
             <span>
-              {email.from} · {formatTime(email.receivedAt)}
+              {email.from} - {formatTime(email.receivedAt)}
             </span>
             <p>{email.preview}</p>
-          </article>
-        ))}
+            <div className="source-proof-actions">
+              {email.senderEmail ? (
+                senderBlock ? (
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    onClick={() => onUnblockSender(senderBlock)}
+                  >
+                    Allow sender in AI
+                  </button>
+                ) : (
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    onClick={() => onBlockSender(email)}
+                  >
+                    Block sender from AI
+                  </button>
+                )
+              ) : (
+                <span className="inline-help">This thread has no sender email to block yet.</span>
+              )}
+              <span className={senderBlock ? "status-pill" : "status-pill ready"}>
+                {senderBlock ? "Private sender blocked" : "AI can use this sender"}
+              </span>
+            </div>
+            </article>
+          );
+        })}
         {syncedEmails.length === 0 ? (
           <article className="source-proof-card empty">
             <strong>No synced email threads yet</strong>
@@ -1942,6 +2121,28 @@ function WorkspaceSnapshotPanel({
           </article>
         ) : null}
       </div>
+      {blockedSenders.length > 0 ? (
+        <div className="blocked-sender-list" aria-label="Private senders blocked from AI">
+          {blockedSenders.map((block) => (
+            <article className="source-proof-card" key={block.id}>
+              <strong>{block.senderName ?? block.senderEmail}</strong>
+              <span>
+                {block.senderEmail} - {block.provider}
+              </span>
+              <p>{block.reason}</p>
+              <div className="source-proof-actions">
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={() => onUnblockSender(block)}
+                >
+                  Allow sender in AI
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

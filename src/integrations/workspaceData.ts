@@ -185,6 +185,7 @@ export function mapEmailRowToMessage(
   return {
     id: row.provider_message_id || row.id,
     from: senderName,
+    senderEmail: row.from_email?.trim() || undefined,
     role: inferSenderRole(row.from_email, row.provider),
     avatar: buildAvatarDataUri(senderName, row.provider),
     subject,
@@ -201,6 +202,7 @@ export function mapEmailRowToMessage(
       ? `This thread looks blocked on ${waitingOn}. Keep it visible, but open the source thread before changing ownership or timing.`
       : `Source-backed from ${humanizeProvider(row.provider)} message metadata. Open the source thread before sending, approving, or editing anything sensitive.`,
     labels: Array.from(new Set([...(row.labels ?? []), row.provider])),
+    provider: row.provider,
     waitingOn,
   };
 }

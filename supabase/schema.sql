@@ -97,6 +97,19 @@ create table if not exists public.organizations (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.ai_sender_blocks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  organization_id uuid references public.organizations(id) on delete set null,
+  provider text not null default 'google' check (provider in ('google', 'slack', 'whatsapp', 'microsoft', 'notion', 'manual')),
+  sender_email text not null,
+  sender_name text,
+  reason text not null default 'Private sender',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, provider, sender_email)
+);
+
 create table if not exists public.organization_memberships (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -110,7 +123,7 @@ create table if not exists public.organization_memberships (
 create table if not exists public.enterprise_policies (
   organization_id uuid primary key references public.organizations(id) on delete cascade,
   ai_provider text not null default 'openai',
-  ai_model text not null default 'gpt-5-mini',
+  ai_model text not null default 'gpt-5.4',
   max_email_messages integer not null default 50 check (max_email_messages between 1 and 250),
   max_calendar_events integer not null default 100 check (max_calendar_events between 0 and 500),
   require_approval_for_sending boolean not null default true,
@@ -237,6 +250,8 @@ alter table public.action_items add column if not exists organization_id uuid;
 alter table public.action_items add column if not exists plan_run_id uuid;
 alter table public.action_items add column if not exists source_thread_id text;
 alter table public.action_items add column if not exists source_subject text;
+alter table public.action_items add column if not exists source_sender_name text;
+alter table public.action_items add column if not exists source_sender_email text;
 alter table public.action_items add column if not exists source_url text;
 alter table public.action_items add column if not exists category text not null default 'follow-up';
 alter table public.action_items add column if not exists effort_minutes integer not null default 15;
@@ -298,6 +313,9 @@ create index if not exists connected_accounts_user_provider_idx
 create index if not exists provider_token_vault_user_provider_idx
   on public.provider_token_vault(user_id, provider);
 
+create index if not exists ai_sender_blocks_user_provider_idx
+  on public.ai_sender_blocks(user_id, provider, sender_email);
+
 create index if not exists action_items_user_status_due_idx
   on public.action_items(user_id, status, due_at);
 
@@ -343,6 +361,11 @@ for each row execute function public.set_updated_at();
 drop trigger if exists provider_token_vault_set_updated_at on public.provider_token_vault;
 create trigger provider_token_vault_set_updated_at
 before update on public.provider_token_vault
+for each row execute function public.set_updated_at();
+
+drop trigger if exists ai_sender_blocks_set_updated_at on public.ai_sender_blocks;
+create trigger ai_sender_blocks_set_updated_at
+before update on public.ai_sender_blocks
 for each row execute function public.set_updated_at();
 
 drop trigger if exists action_items_set_updated_at on public.action_items;
@@ -473,6 +496,7 @@ alter table public.profiles enable row level security;
 alter table public.user_settings enable row level security;
 alter table public.connected_accounts enable row level security;
 alter table public.provider_token_vault enable row level security;
+alter table public.ai_sender_blocks enable row level security;
 alter table public.action_items enable row level security;
 alter table public.organizations enable row level security;
 alter table public.organization_memberships enable row level security;
@@ -505,6 +529,12 @@ with check (auth.uid() = user_id);
 drop policy if exists "Users can manage their connected account metadata" on public.connected_accounts;
 create policy "Users can manage their connected account metadata"
 on public.connected_accounts for all
+using (auth.uid() = user_id and (organization_id is null or public.is_org_member(organization_id)))
+with check (auth.uid() = user_id and (organization_id is null or public.is_org_member(organization_id)));
+
+drop policy if exists "Users can manage their AI sender blocks" on public.ai_sender_blocks;
+create policy "Users can manage their AI sender blocks"
+on public.ai_sender_blocks for all
 using (auth.uid() = user_id and (organization_id is null or public.is_org_member(organization_id)))
 with check (auth.uid() = user_id and (organization_id is null or public.is_org_member(organization_id)));
 

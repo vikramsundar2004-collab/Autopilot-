@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "ios:sync": "npm run build && cap sync ios",
+    "build:ios": "tsc -b && vite build --mode ios",
+    "ios:sync": "npm run build:ios && cap sync ios",
     "ios:open": "cap open ios",
-    "ios:copy": "npm run build && cap copy ios",
+    "ios:copy": "npm run build:ios && cap copy ios",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:watch": "vitest"

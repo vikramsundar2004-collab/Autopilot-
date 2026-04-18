@@ -12,6 +12,7 @@ export type CalendarEventType = "meeting" | "focus" | "deadline" | "personal";
 export interface EmailMessage {
   id: string;
   from: string;
+  senderEmail?: string;
   role: string;
   avatar: string;
   subject: string;
@@ -26,6 +27,7 @@ export interface EmailMessage {
   actionHint: string;
   risk: string;
   labels: string[];
+  provider?: string;
   waitingOn?: string;
 }
 
@@ -51,6 +53,8 @@ export interface ActionItem {
   sourceRole: string;
   sourceAvatar: string;
   sourceSubject: string;
+  sourceProvider?: string;
+  sourceSenderEmail?: string;
   receivedAt: string;
   dueAt?: string;
   priority: EmailPriority;
@@ -62,6 +66,7 @@ export interface ActionItem {
   risk: string;
   labels: string[];
   rankScore: number;
+  requiresApproval?: boolean;
 }
 
 export interface FocusWindow {
