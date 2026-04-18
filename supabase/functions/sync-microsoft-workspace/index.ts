@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.103.3";
+import { getAuthenticatedUser } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,11 +25,15 @@ Deno.serve(async (req) => {
   const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) return json({ error: "Invalid Supabase session." }, 401);
+  const { user, error: authError } = await getAuthenticatedUser({
+    supabaseUrl,
+    supabaseAnonKey,
+    authorization,
+  });
+  if (authError || !user) return json({ error: authError ?? "Invalid Supabase session." }, 401);
 
   const body = await safeBody(req);
-  const userId = authData.user.id;
+  const userId = user.id;
   const organizationId = typeof body.organizationId === "string" ? body.organizationId : null;
   if (organizationId) {
     const { data: membership, error: membershipError } = await supabase
@@ -52,7 +57,7 @@ Deno.serve(async (req) => {
   const tokenResult = await resolveMicrosoftAccessToken(serviceClient, {
     userId,
     organizationId,
-    providerUserId: authData.user.email ?? userId,
+    providerUserId: user.email ?? userId,
     bodyAccessToken,
     bodyRefreshToken,
   });
@@ -64,7 +69,7 @@ Deno.serve(async (req) => {
       user_id: userId,
       organization_id: organizationId,
       provider: "microsoft",
-      provider_user_id: authData.user.email ?? userId,
+      provider_user_id: user.email ?? userId,
       scopes: ["Mail.Read", "Calendars.Read", "offline_access"],
       status: "connected",
       updated_at: new Date().toISOString(),

@@ -1,0 +1,22 @@
+project_id = "qwktgunwrasxthmssnxk"
+
+[functions.store-google-connection]
+verify_jwt = false
+
+[functions.sync-google-workspace]
+verify_jwt = false
+
+[functions.sync-microsoft-workspace]
+verify_jwt = false
+
+[functions.plan-day]
+verify_jwt = false
+
+[functions.draft-email]
+verify_jwt = false
+
+[functions.join-enterprise]
+verify_jwt = false
+
+[functions.enterprise-chat-assistant]
+verify_jwt = false

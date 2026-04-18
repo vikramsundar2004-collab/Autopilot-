@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.103.3";
+import { getAuthenticatedUser } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,12 +41,12 @@ Deno.serve(async (req) => {
   const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
-
-  const {
-    data: authData,
-    error: authError,
-  } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json({ error: "Invalid Supabase session." }, 401);
+  const { user, error: authError } = await getAuthenticatedUser({
+    supabaseUrl,
+    supabaseAnonKey,
+    authorization,
+  });
+  if (authError || !user) return json({ error: authError ?? "Invalid Supabase session." }, 401);
 
   const body = await safeBody(req);
   const organizationId = String(body.organizationId ?? "").trim();
@@ -57,7 +58,7 @@ Deno.serve(async (req) => {
     .from("organization_memberships")
     .select("id")
     .eq("organization_id", organizationId)
-    .eq("user_id", authData.user.id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (membershipResult.error || !membershipResult.data) {
     return json({ error: "You are not a member of this enterprise." }, 403);
@@ -112,7 +113,7 @@ Deno.serve(async (req) => {
     return {
       organization_id: organizationId,
       source_chat_message_id: messageId || null,
-      created_by: authData.user.id,
+      created_by: user.id,
       assigned_to_user_id: assignee?.userId ?? null,
       assigned_to_label: assignee?.fullName ?? limit(assignment.assignedTo || "Team member", 120),
       title: limit(assignment.title || "Enterprise follow-up", 160),
@@ -143,7 +144,7 @@ Deno.serve(async (req) => {
   }
 
   await serviceClient.from("audit_events").insert({
-    user_id: authData.user.id,
+    user_id: user.id,
     organization_id: organizationId,
     actor_type: "system",
     action: "enterprise.chat_assignments_generated",

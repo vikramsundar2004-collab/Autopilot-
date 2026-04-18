@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.103.3";
+import { getAuthenticatedUser } from "../_shared/auth.ts";
 
 type Priority = "urgent" | "high" | "medium" | "low";
 type Category = "reply" | "review" | "schedule" | "send" | "approve" | "follow-up";
@@ -23,11 +24,15 @@ Deno.serve(async (req) => {
     auth: { persistSession: false },
     global: { headers: { Authorization: authorization } },
   });
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) return json({ error: "Invalid Supabase session." }, 401);
+  const { user, error: authError } = await getAuthenticatedUser({
+    supabaseUrl,
+    supabaseAnonKey,
+    authorization,
+  });
+  if (authError || !user) return json({ error: authError ?? "Invalid Supabase session." }, 401);
 
   const body = await safeBody(req);
-  const userId = authData.user.id;
+  const userId = user.id;
   const date = body.date ?? new Date().toISOString().slice(0, 10);
   const timezone = body.timezone ?? "America/Los_Angeles";
   const organizationId = typeof body.organizationId === "string" ? body.organizationId : null;

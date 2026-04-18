@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.103.3";
+import { getAuthenticatedUser } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,19 +20,15 @@ Deno.serve(async (req) => {
   }
   if (!authorization?.startsWith("Bearer ")) return json({ error: "Missing bearer token." }, 401);
 
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false },
-    global: { headers: { Authorization: authorization } },
-  });
   const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
-
-  const {
-    data: authData,
-    error: authError,
-  } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json({ error: "Invalid Supabase session." }, 401);
+  const { user, error: authError } = await getAuthenticatedUser({
+    supabaseUrl,
+    supabaseAnonKey,
+    authorization,
+  });
+  if (authError || !user) return json({ error: authError ?? "Invalid Supabase session." }, 401);
 
   const body = await safeBody(req);
   const joinKey = String(body.joinKey ?? "").trim().toUpperCase();
@@ -53,7 +50,7 @@ Deno.serve(async (req) => {
   const membershipResult = await serviceClient.from("organization_memberships").upsert(
     {
       organization_id: organization.id,
-      user_id: authData.user.id,
+      user_id: user.id,
       role: "member",
       updated_at: new Date().toISOString(),
     },
@@ -64,7 +61,7 @@ Deno.serve(async (req) => {
   }
 
   await serviceClient.from("audit_events").insert({
-    user_id: authData.user.id,
+    user_id: user.id,
     organization_id: organization.id,
     actor_type: "user",
     action: "enterprise.joined",
@@ -72,7 +69,7 @@ Deno.serve(async (req) => {
     target_id: organization.id,
     metadata: {
       joinKey,
-      email: authData.user.email ?? null,
+      email: user.email ?? null,
     },
   });
 

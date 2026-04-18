@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.103.3";
+import { getAuthenticatedUser } from "../_shared/auth.ts";
 
 const googleScopes = [
   "openid",
@@ -34,9 +35,12 @@ Deno.serve(async (req) => {
   const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
-
-  const { data: authData, error: authError } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json({ error: "Invalid Supabase session." }, 401);
+  const { user, error: authError } = await getAuthenticatedUser({
+    supabaseUrl,
+    supabaseAnonKey,
+    authorization,
+  });
+  if (authError || !user) return json({ error: authError ?? "Invalid Supabase session." }, 401);
 
   const body = await safeBody(req);
   const accessToken = typeof body.providerAccessToken === "string" ? body.providerAccessToken : "";
@@ -51,14 +55,14 @@ Deno.serve(async (req) => {
       .from("organization_memberships")
       .select("id")
       .eq("organization_id", organizationId)
-      .eq("user_id", authData.user.id)
+      .eq("user_id", user.id)
       .maybeSingle();
     if (membershipError || !membership) {
       return json({ error: "You are not a member of this organization." }, 403);
     }
   }
 
-  const providerUserId = authData.user.email ?? authData.user.id;
+  const providerUserId = user.email ?? user.id;
   const accessTokenExpiresAt = new Date(Date.now() + 55 * 60_000).toISOString();
   const warnings: string[] = [];
   let tokenStored = false;
@@ -67,7 +71,7 @@ Deno.serve(async (req) => {
     const accessTokenCiphertext = accessToken ? await encryptToken(accessToken) : null;
     const refreshTokenCiphertext = refreshToken ? await encryptToken(refreshToken) : undefined;
     const vaultRow: Record<string, unknown> = {
-      user_id: authData.user.id,
+      user_id: user.id,
       organization_id: organizationId,
       provider: "google",
       provider_user_id: providerUserId,
@@ -96,7 +100,7 @@ Deno.serve(async (req) => {
   let metadataStored = false;
   const { error: metadataError } = await serviceClient.from("connected_accounts").upsert(
     {
-      user_id: authData.user.id,
+      user_id: user.id,
       organization_id: organizationId,
       provider: "google",
       provider_user_id: providerUserId,
@@ -113,7 +117,7 @@ Deno.serve(async (req) => {
   }
 
   await serviceClient.from("audit_events").insert({
-    user_id: authData.user.id,
+    user_id: user.id,
     organization_id: organizationId,
     actor_type: "system",
     action: refreshToken ? "google_connection.stored_refresh_token" : "google_connection.stored_access_token",

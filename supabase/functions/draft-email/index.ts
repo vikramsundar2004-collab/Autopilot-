@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.103.3";
+import { getAuthenticatedUser } from "../_shared/auth.ts";
 
 type DraftTheme = "direct" | "warm" | "executive";
 type Priority = "urgent" | "high" | "medium" | "low";
@@ -20,12 +20,12 @@ Deno.serve(async (req) => {
   if (!supabaseUrl || !supabaseAnonKey) return json({ error: "Missing Supabase env." }, 500);
   if (!authorization?.startsWith("Bearer ")) return json({ error: "Missing bearer token." }, 401);
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false },
-    global: { headers: { Authorization: authorization } },
+  const { user, error: authError } = await getAuthenticatedUser({
+    supabaseUrl,
+    supabaseAnonKey,
+    authorization,
   });
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) return json({ error: "Invalid Supabase session." }, 401);
+  if (authError || !user) return json({ error: authError ?? "Invalid Supabase session." }, 401);
 
   const body = await safeBody(req);
   const theme = normalizeTheme(body.theme);
