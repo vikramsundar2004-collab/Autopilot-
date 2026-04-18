@@ -54,25 +54,6 @@ Deno.serve(async (req) => {
       ? body.calendarEvents
       : await loadCalendar(supabase, userId, date, policy.max_calendar_events ?? 100);
 
-  const { data: run, error: runError } = await supabase
-    .from("plan_runs")
-    .insert({
-      user_id: userId,
-      organization_id: organizationId,
-      run_date: date,
-      timezone,
-      status: "pending",
-      input_counts: {
-        emails: planningEmails.length,
-        totalEmails: emails.length,
-        blockedEmails: blockedEmailCount,
-        calendarEvents: events.length,
-      },
-    })
-    .select("id")
-    .single();
-  if (runError || !run) return json({ error: runError?.message ?? "Could not create plan run." }, 500);
-
   const planned = await planWithAiOrFallback({
     date,
     timezone,
@@ -82,26 +63,21 @@ Deno.serve(async (req) => {
     policy,
   });
 
-  const persisted = await persistPlan(supabase, {
+  const persisted = await persistPlanSafely(supabase, {
     userId,
     organizationId,
-    planRunId: run.id,
+    date,
+    timezone,
+    calendarEventCount: events.length,
     plan: planned.plan,
     emails: planningEmails,
     source: planned.source,
     model: planned.model,
     blockedEmailCount,
   });
-  if (!persisted.ok) {
-    await supabase
-      .from("plan_runs")
-      .update({ status: "failed", error: persisted.error, completed_at: new Date().toISOString() })
-      .eq("id", run.id);
-    return json({ error: persisted.error }, 500);
-  }
 
   return json({
-    planRunId: run.id,
+    planRunId: persisted.planRunId ?? null,
     source: planned.source,
     model: planned.model,
     fallbackReason: planned.fallbackReason,
@@ -250,6 +226,50 @@ async function planWithAiOrFallback(input: any) {
       plan: fallbackPlan(input),
     };
   }
+}
+
+async function persistPlanSafely(supabase: any, input: any) {
+  const { data: run, error: runError } = await supabase
+    .from("plan_runs")
+    .insert({
+      user_id: input.userId,
+      organization_id: input.organizationId,
+      run_date: input.date,
+      timezone: input.timezone,
+      status: "pending",
+      input_counts: {
+        emails: input.emails.length,
+        totalEmails: input.emails.length + (input.blockedEmailCount ?? 0),
+        blockedEmails: input.blockedEmailCount ?? 0,
+        calendarEvents: input.calendarEventCount ?? 0,
+      },
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (runError || !run) {
+    return {
+      ok: false,
+      error: runError?.message ?? "Could not create a saved plan run.",
+      actionCount: input.plan.actionItems.length,
+      scheduleBlockCount: input.plan.scheduleBlocks.length,
+      approvalCount: input.plan.actionItems.filter((item: any) => item.requiresApproval).length,
+    };
+  }
+
+  const persisted = await persistPlan(supabase, {
+    ...input,
+    planRunId: run.id,
+  });
+  if (!persisted.ok) {
+    await supabase
+      .from("plan_runs")
+      .update({ status: "failed", error: persisted.error, completed_at: new Date().toISOString() })
+      .eq("id", run.id);
+    return { ...persisted, planRunId: run.id };
+  }
+
+  return { ...persisted, planRunId: run.id };
 }
 
 async function persistPlan(supabase: any, input: any) {

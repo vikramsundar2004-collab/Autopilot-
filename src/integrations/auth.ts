@@ -1,10 +1,12 @@
 import { Capacitor } from "@capacitor/core";
 import type { Session } from "@supabase/supabase-js";
 import type { IntegrationKey } from "./providers";
+import { describeFunctionError } from "./functionErrors";
 import { getProviderByKey } from "./providers";
 import { getAppUrl, hasSupabaseConfig, supabase } from "./supabaseClient";
 
 const pendingOAuthIntentStorageKey = "autopilot-ai:pending-oauth-intent";
+const googleWorkspaceSessionStorageKey = "autopilot-ai:google-workspace-session";
 type OAuthIntent = IntegrationKey | "google-login" | "google-workspace";
 
 export interface ConnectionResult {
@@ -134,6 +136,7 @@ export async function startEmailLogin(email: string): Promise<ConnectionResult> 
 export async function signOut(): Promise<ConnectionResult> {
   if (!supabase) return { ok: false, message: "Supabase is not configured." };
   clearPendingOAuthIntent();
+  clearGoogleWorkspaceSessionFlag();
   const { error } = await supabase.auth.signOut();
   if (error) return { ok: false, message: error.message };
   return { ok: true, message: "Signed out." };
@@ -208,11 +211,12 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
     ok: true,
     googleConnected: Boolean(tokenResult?.googleConnected),
     message:
-      tokenResult?.googleConnected
+      tokenResult?.message?.trim() ||
+      (tokenResult?.googleConnected
         ? "Google is connected. You can sync Gmail and Calendar without reconnecting."
         : pendingIntent === "google-login"
           ? "Signed in with Google. Open Sources to finish Gmail and Calendar connection."
-        : `Signed in with ${String(provider)}.`,
+          : `Signed in with ${String(provider)}.`),
   };
 }
 
@@ -236,13 +240,28 @@ export async function storeGoogleConnection(
       ],
     },
   });
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    return {
+      ok: false,
+      message: await describeFunctionError(
+        error,
+        "Google connection storage failed.",
+      ),
+    };
+  }
+
+  const warning = typeof data?.warning === "string" ? data.warning.trim() : "";
+  if (data?.connected) {
+    markGoogleWorkspaceSessionConnected();
+  }
   return {
     ok: true,
     googleConnected: Boolean(data?.connected),
-    message: data?.refreshTokenStored
-      ? "Google connection saved for background sync."
-      : "Google connection saved with the current access token.",
+    message: warning
+      ? warning
+      : data?.refreshTokenStored
+        ? "Google connection saved for background sync."
+        : "Google connection saved with the current access token.",
   };
 }
 
@@ -269,6 +288,21 @@ export function consumePendingOAuthIntent(): OAuthIntent | null {
 function clearPendingOAuthIntent(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(pendingOAuthIntentStorageKey);
+}
+
+export function hasGoogleWorkspaceSessionFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(googleWorkspaceSessionStorageKey) === "connected";
+}
+
+export function markGoogleWorkspaceSessionConnected(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(googleWorkspaceSessionStorageKey, "connected");
+}
+
+function clearGoogleWorkspaceSessionFlag(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(googleWorkspaceSessionStorageKey);
 }
 
 function isOAuthIntent(value: string | null): value is OAuthIntent {

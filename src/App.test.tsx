@@ -179,6 +179,16 @@ describe("App", () => {
     expect(screen.getByLabelText("Calendar event title")).toBeInTheDocument();
   });
 
+  it("shows a dedicated calendar AI panel on the calendar page", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
+
+    expect(screen.getByRole("heading", { name: "Calendar AI" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Calendar assistant request")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run calendar AI" })).toBeInTheDocument();
+  });
+
   it("shows editable themed reply drafts for important synced email", () => {
     render(<App />);
 

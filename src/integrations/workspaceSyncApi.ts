@@ -1,3 +1,15 @@
+import type { CalendarEvent, EmailMessage } from "../types";
+import {
+  hasGoogleWorkspaceSessionFlag,
+  markGoogleWorkspaceSessionConnected,
+} from "./auth";
+import { describeFunctionError } from "./functionErrors";
+import {
+  mapCalendarRowsToEvents,
+  mapEmailRowsToMessages,
+  type CalendarEventRow,
+  type EmailMessageRow,
+} from "./workspaceData";
 import { supabase } from "./supabaseClient";
 
 export interface GoogleWorkspaceSyncRequest {
@@ -14,6 +26,9 @@ export interface GoogleWorkspaceSyncResult {
   message: string;
   emailCount?: number;
   calendarEventCount?: number;
+  persisted?: boolean;
+  emails: EmailMessage[];
+  calendarEvents: CalendarEvent[];
 }
 
 export interface MicrosoftWorkspaceSyncRequest {
@@ -42,8 +57,17 @@ export async function getGoogleWorkspaceConnectionStatus(): Promise<GoogleWorksp
     .eq("provider", "google")
     .eq("status", "connected")
     .limit(1);
-  if (error) return { connected: false };
-  return { connected: Boolean(data?.length), status: data?.[0]?.status };
+  if (error) {
+    return hasGoogleWorkspaceSessionFlag()
+      ? { connected: true, status: "session" }
+      : { connected: false };
+  }
+  if (data?.length) {
+    return { connected: true, status: data[0]?.status };
+  }
+  return hasGoogleWorkspaceSessionFlag()
+    ? { connected: true, status: "session" }
+    : { connected: false };
 }
 
 export async function syncGoogleWorkspace(
@@ -53,15 +77,17 @@ export async function syncGoogleWorkspace(
     return {
       ok: false,
       message: "Add Supabase env vars before syncing Google Workspace.",
+      emails: [],
+      calendarEvents: [],
     };
   }
 
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
-    return { ok: false, message: sessionError.message };
+    return { ok: false, message: sessionError.message, emails: [], calendarEvents: [] };
   }
   if (!sessionData.session) {
-    return { ok: false, message: "Sign in before syncing Google Workspace." };
+    return { ok: false, message: "Sign in before syncing Google Workspace.", emails: [], calendarEvents: [] };
   }
 
   const session = sessionData.session as (typeof sessionData.session & { provider_token?: string }) | null;
@@ -76,14 +102,39 @@ export async function syncGoogleWorkspace(
   });
 
   if (error) {
-    return { ok: false, message: error.message };
+    return {
+      ok: false,
+      message: await describeFunctionError(error, "Google sync failed."),
+      emails: [],
+      calendarEvents: [],
+    };
+  }
+
+  const date = request.date ?? new Date().toISOString().slice(0, 10);
+  const emails = Array.isArray(data?.emailRows)
+    ? mapEmailRowsToMessages(data.emailRows as EmailMessageRow[], date)
+    : [];
+  const calendarEvents = Array.isArray(data?.calendarRows)
+    ? mapCalendarRowsToEvents(data.calendarRows as CalendarEventRow[])
+    : [];
+  const persisted = data?.persisted !== false;
+  if (persisted || emails.length > 0 || calendarEvents.length > 0) {
+    markGoogleWorkspaceSessionConnected();
   }
 
   return {
     ok: true,
-    message: "Google Workspace sync complete.",
+    message:
+      typeof data?.message === "string" && data.message.trim()
+        ? data.message
+        : persisted
+          ? "Google Workspace sync complete."
+          : "Google Workspace loaded for the current session, but storage is unavailable.",
     emailCount: data?.emailCount ?? 0,
     calendarEventCount: data?.calendarEventCount ?? 0,
+    persisted,
+    emails,
+    calendarEvents,
   };
 }
 
@@ -94,6 +145,8 @@ export async function syncMicrosoftWorkspace(
     return {
       ok: false,
       message: "Add Supabase env vars before syncing Microsoft 365.",
+      emails: [],
+      calendarEvents: [],
     };
   }
 
@@ -102,7 +155,12 @@ export async function syncMicrosoftWorkspace(
   });
 
   if (error) {
-    return { ok: false, message: error.message };
+    return {
+      ok: false,
+      message: await describeFunctionError(error, "Microsoft 365 sync failed."),
+      emails: [],
+      calendarEvents: [],
+    };
   }
 
   return {
@@ -110,5 +168,7 @@ export async function syncMicrosoftWorkspace(
     message: "Microsoft 365 sync complete.",
     emailCount: data?.emailCount ?? 0,
     calendarEventCount: data?.calendarEventCount ?? 0,
+    emails: [],
+    calendarEvents: [],
   };
 }

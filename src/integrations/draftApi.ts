@@ -1,5 +1,6 @@
 import type { DraftTheme } from "../emailDrafts";
 import type { EmailPriority, TaskCategory } from "../types";
+import { describeFunctionError } from "./functionErrors";
 import { supabase } from "./supabaseClient";
 
 export interface DraftApiEmail {
@@ -55,7 +56,10 @@ export async function generateReplyDraftsApi(input: {
   if (error) {
     return {
       ok: false,
-      message: error.message,
+      message: await describeFunctionError(
+        error,
+        "Draft generation failed.",
+      ),
       drafts: [],
     };
   }

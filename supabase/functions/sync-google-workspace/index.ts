@@ -58,8 +58,10 @@ Deno.serve(async (req) => {
   });
   if (!tokenResult.ok) return json({ error: tokenResult.error }, tokenResult.status);
   const providerAccessToken = tokenResult.accessToken;
+  const warnings: string[] = [];
+  if (tokenResult.warning) warnings.push(tokenResult.warning);
 
-  await serviceClient.from("connected_accounts").upsert(
+  const { error: metadataError } = await serviceClient.from("connected_accounts").upsert(
     {
       user_id: userId,
       organization_id: organizationId,
@@ -77,6 +79,9 @@ Deno.serve(async (req) => {
     },
     { onConflict: "user_id,provider,provider_user_id" },
   );
+  if (metadataError) {
+    warnings.push(`Google connection metadata could not be saved: ${metadataError.message}`);
+  }
 
   let gmailMessages;
   let calendarEvents;
@@ -121,14 +126,18 @@ Deno.serve(async (req) => {
   const { error: emailError } = emailRows.length
     ? await supabase.from("email_messages").upsert(emailRows, { onConflict: "user_id,provider,provider_message_id" })
     : { error: null };
-  if (emailError) return json({ error: emailError.message }, 500);
+  if (emailError) {
+    warnings.push(`Email storage is unavailable: ${emailError.message}`);
+  }
 
   const { error: calendarError } = calendarRows.length
     ? await supabase
         .from("calendar_events")
         .upsert(calendarRows, { onConflict: "user_id,provider,provider_event_id" })
     : { error: null };
-  if (calendarError) return json({ error: calendarError.message }, 500);
+  if (calendarError) {
+    warnings.push(`Calendar storage is unavailable: ${calendarError.message}`);
+  }
 
   await serviceClient.from("audit_events").insert({
     user_id: userId,
@@ -147,10 +156,46 @@ Deno.serve(async (req) => {
     metadata: { emailCount: emailRows.length, calendarEventCount: calendarRows.length },
   });
 
+  const emailResponseRows = emailRows.map((row) => ({
+    id: row.provider_message_id,
+    provider: row.provider,
+    provider_message_id: row.provider_message_id,
+    thread_id: row.thread_id,
+    from_name: row.from_name,
+    from_email: row.from_email,
+    subject: row.subject,
+    snippet: row.snippet,
+    body_preview: row.body_preview,
+    received_at: row.received_at,
+    labels: row.labels,
+    importance: row.importance,
+  }));
+  const calendarResponseRows = calendarRows.map((row) => ({
+    id: row.provider_event_id,
+    provider: row.provider,
+    provider_event_id: row.provider_event_id,
+    title: row.title,
+    description: row.description,
+    location: row.location,
+    start_at: row.start_at,
+    end_at: row.end_at,
+    event_type: row.event_type,
+    attendees: row.attendees,
+  }));
+  const warning = warnings.join(" ").trim();
+  const persisted = warnings.length === 0;
+
   return json({
     ok: true,
+    persisted,
+    message: persisted
+      ? "Google Workspace sync complete."
+      : `Google Workspace synced for the current session. ${warning}`,
     emailCount: emailRows.length,
     calendarEventCount: calendarRows.length,
+    emailRows: emailResponseRows,
+    calendarRows: calendarResponseRows,
+    warning: warning || null,
   });
 });
 
@@ -255,7 +300,10 @@ async function resolveGoogleAccessToken(
     bodyAccessToken: string;
     bodyRefreshToken: string;
   },
-): Promise<{ ok: true; accessToken: string } | { ok: false; error: string; status: number }> {
+): Promise<
+  | { ok: true; accessToken: string; warning?: string }
+  | { ok: false; error: string; status: number }
+> {
   const { data: tokenRow, error: tokenError } = await serviceClient
     .from("provider_token_vault")
     .select("access_token_ciphertext, refresh_token_ciphertext, access_token_expires_at, scopes")
@@ -266,6 +314,21 @@ async function resolveGoogleAccessToken(
   if (tokenError) return { ok: false, error: tokenError.message, status: 500 };
 
   try {
+    if (input.bodyAccessToken) {
+      const warning = await bestEffortTokenUpsert(serviceClient, {
+        userId: input.userId,
+        organizationId: input.organizationId,
+        providerUserId: input.providerUserId,
+        accessToken: input.bodyAccessToken,
+        refreshToken: input.bodyRefreshToken || null,
+        expiresIn: 3300,
+        scopes: tokenRow?.scopes ?? [],
+      });
+      return warning
+        ? { ok: true, accessToken: input.bodyAccessToken, warning }
+        : { ok: true, accessToken: input.bodyAccessToken };
+    }
+
     const expiresAt = tokenRow?.access_token_expires_at ? Date.parse(tokenRow.access_token_expires_at) : 0;
     if (tokenRow?.access_token_ciphertext && expiresAt > Date.now() + 5 * 60_000) {
       return { ok: true, accessToken: await decryptToken(tokenRow.access_token_ciphertext) };
@@ -274,7 +337,7 @@ async function resolveGoogleAccessToken(
     if (tokenRow?.refresh_token_ciphertext) {
       const refreshToken = await decryptToken(tokenRow.refresh_token_ciphertext);
       const refreshed = await refreshGoogleAccessToken(refreshToken);
-      await upsertGoogleToken(serviceClient, {
+      const warning = await bestEffortTokenUpsert(serviceClient, {
         userId: input.userId,
         organizationId: input.organizationId,
         providerUserId: input.providerUserId,
@@ -283,20 +346,9 @@ async function resolveGoogleAccessToken(
         expiresIn: refreshed.expiresIn,
         scopes: refreshed.scope ? refreshed.scope.split(" ") : tokenRow.scopes ?? [],
       });
-      return { ok: true, accessToken: refreshed.accessToken };
-    }
-
-    if (input.bodyAccessToken) {
-      await upsertGoogleToken(serviceClient, {
-        userId: input.userId,
-        organizationId: input.organizationId,
-        providerUserId: input.providerUserId,
-        accessToken: input.bodyAccessToken,
-        refreshToken: input.bodyRefreshToken || null,
-        expiresIn: 3300,
-        scopes: [],
-      });
-      return { ok: true, accessToken: input.bodyAccessToken };
+      return warning
+        ? { ok: true, accessToken: refreshed.accessToken, warning }
+        : { ok: true, accessToken: refreshed.accessToken };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Could not resolve Google token.", status: 500 };
@@ -307,6 +359,28 @@ async function resolveGoogleAccessToken(
     error: "Google is not connected for this user. Sign in with Google once, then sync again.",
     status: 400,
   };
+}
+
+async function bestEffortTokenUpsert(
+  serviceClient: any,
+  input: {
+    userId: string;
+    organizationId: string | null;
+    providerUserId: string;
+    accessToken: string;
+    refreshToken: string | null;
+    expiresIn: number;
+    scopes: string[];
+  },
+) {
+  try {
+    await upsertGoogleToken(serviceClient, input);
+    return undefined;
+  } catch (error) {
+    return `Google token vault is unavailable for background sync: ${
+      error instanceof Error ? error.message : "Could not store the Google token."
+    }`;
+  }
 }
 
 async function refreshGoogleAccessToken(refreshToken: string) {

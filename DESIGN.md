@@ -1,59 +1,50 @@
 # Design System - Autopilot-AI
 
 ## Product Context
-- **What this is:** A productivity command center that turns email and calendar signals into a clean daily action plan.
-- **Who it is for:** Busy professionals who lose track of commitments buried in inbox threads.
-- **Project type:** Web app dashboard.
-- **Current product boundary:** Live Google Workspace sync for Gmail metadata/snippets and Calendar events, plus planner persistence and privacy controls. Slack, WhatsApp, Microsoft write actions, and pricing/billing flows are still not live.
+- **What this is:** A productivity cockpit that reads Gmail and calendar context, extracts action items, drafts replies, and helps plan the day.
+- **Who it is for:** Operators, founders, and busy professionals who want one place to see what matters next.
+- **Project type:** Web-first application with a matching iOS shell.
+- **Current product boundary:** Live Google Workspace sync, editable reply drafts, privacy controls, AI planning, calendar operations, and enterprise-style audit and approval concepts.
 
 ## Aesthetic Direction
-- **Direction:** Editorial utility.
-- **Decoration level:** Minimal and intentional.
-- **Mood:** Calm, crisp, and decisive. It should feel like a thoughtful operations desk, not a loud SaaS dashboard.
-- **Avoid:** Purple gradients, decorative blobs, oversized rounded cards, icon-in-circle feature grids, centered marketing copy.
+- **Direction:** Warm operations room.
+- **Mood:** Controlled, premium, and simple. The app should feel like a focused command desk, not a toy dashboard.
+- **Visual stance:** Dark navigation rail, bright paper workspace, strong typography, clear information blocks, restrained color.
+- **Avoid:** Generic pale SaaS cards, giant empty whitespace, purple gradients, overly rounded “AI blob” styling, or marketing-site patterns inside the product.
 
 ## Typography
-- **Display:** Instrument Serif, used sparingly for the product mark and one daily readout.
-- **Body/UI:** Instrument Sans, because it stays readable in dense app layouts without feeling default.
-- **Data:** IBM Plex Mono, used for time, confidence, and counts.
+- **Display:** Sora for headlines, commands, and structural titles.
+- **Body/UI:** Source Sans 3 for dense readable interface copy.
+- **Data:** JetBrains Mono for time, counts, scopes, and system labels.
 - **Scale:** 12, 14, 16, 18, 24, 32, 44 px.
 
 ## Color
-- **Approach:** Balanced. Neutrals carry the interface, green marks forward motion, red marks urgency, yellow marks time pressure.
-- **Ink:** #171717
-- **Muted ink:** #62645f
-- **Surface:** #f7f8f6
-- **Panel:** #ffffff
-- **Line:** #dadfd6
-- **Primary:** #23684e
-- **Accent:** #d4583f
-- **Warning:** #e0b943
-- **Info:** #3b6f8f
-- **Success:** #2d7b51
-
-## Spacing
-- **Base unit:** 4px.
-- **Density:** Comfortable but information-rich.
-- **Scale:** 4, 8, 12, 16, 20, 24, 32, 48, 64 px.
+- **Ink:** #161311
+- **Muted:** #61584f
+- **Surface:** #efe8dc
+- **Panel:** #fffaf2
+- **Line:** #d9cfbf
+- **Primary:** #bf5a33
+- **Primary strong:** #8f3f22
+- **Accent:** #194f45
+- **Warning:** #d59c1f
+- **Info:** #2a69c7
+- **Success:** #25815b
 
 ## Layout
-- **Approach:** App-first, with persistent navigation, one main workspace, and a secondary insight rail.
-- **Grid:** Desktop uses left nav, main action list, right calendar rail. Tablet stacks the right rail. Mobile collapses into a single-column command feed.
-- **Border radius:** 4px for small controls, 8px for repeated cards and panels, never more unless circular avatars.
+- **Approach:** Persistent left rail plus one dominant workspace canvas.
+- **Desktop:** Dark navigation column, wide center workspace, right-side calendar operations stack where needed.
+- **Tablet/mobile:** Stack the workspace vertically, keep cards readable, and prevent horizontal overflow at all costs.
+- **Panels:** Large paper-like cards with subtle depth and sharper hierarchy.
 
 ## Motion
-- **Approach:** Minimal-functional.
-- **Duration:** 120ms for hover/focus, 180ms for state changes.
-- **Rule:** Motion must clarify state, not decorate empty space.
+- **Approach:** Functional only.
+- **Timing:** 140ms hover/focus, 180ms state transitions.
+- **Rule:** Motion should confirm intent, not decorate static pages.
 
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-04-16 | Build v1 as mock-backed local app | User explicitly asked not to connect Supabase, Google, accounts, or pricing yet. |
-| 2026-04-16 | Keep email intelligence in pure TypeScript functions | Future integrations can replace data sources without rewriting React components. |
-| 2026-04-16 | Ship the extra workflow work as an action lab | The app should expose usable behaviors like apply, undo, snooze, share, sync, and save instead of showing internal planning notes. |
-| 2026-04-17 | Simplify the visual system | The action lab is flatter, labels are shorter, shadows are quieter, and the page reads more like a focused work surface than a control matrix. |
-| 2026-04-17 | Add a familiar calendar day view | The integrated calendar now uses a week strip, hourly grid, and color-coded event blocks so it feels closer to Google Calendar while staying visually aligned with the app. |
-| 2026-04-17 | Add productivity controls above integrations | Focus sprints, quick capture, and planning modes are placed near the daily call because they directly change what the user does next. |
-| 2026-04-17 | Add practical customization | Theme, density, workspace visibility, productivity defaults, and calendar preferences are saved locally now and isolated for future Supabase profile storage. |
-| 2026-04-17 | Add a skippable tutorial | First-run guidance uses a small modal so users can learn the app without replacing the working dashboard. |
+| 2026-04-18 | Move to a warm operations-room visual system | The previous interface was too close to a generic productivity dashboard and did not feel distinct enough. |
+| 2026-04-18 | Put calendar AI directly on the calendar page | Users should not have to infer that calendar AI exists from the daily page. |
+| 2026-04-18 | Keep Gmail, drafts, planning, and privacy as one narrative | The product works best when these surfaces read as one coordinated workflow instead of disconnected features. |

@@ -10,7 +10,7 @@ import { supabase } from "./supabaseClient";
 
 export type WorkspaceDataSource = "demo" | "live" | "empty";
 
-interface EmailMessageRow {
+export interface EmailMessageRow {
   id: string;
   provider: string;
   provider_message_id: string;
@@ -25,7 +25,7 @@ interface EmailMessageRow {
   importance: "low" | "normal" | "high" | "urgent";
 }
 
-interface CalendarEventRow {
+export interface CalendarEventRow {
   id: string;
   provider: string;
   provider_event_id: string;

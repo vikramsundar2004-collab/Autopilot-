@@ -69,7 +69,13 @@ import {
   unblockAiSender,
   type AiSenderBlock,
 } from "./integrations/aiPrivacyApi";
-import { runDailyPlanner } from "./integrations/plannerApi";
+import {
+  type PlannerApiAction,
+  type PlannerApiCalendarInput,
+  type PlannerApiEmailInput,
+  type PlannerApiScheduleBlock,
+  runDailyPlanner,
+} from "./integrations/plannerApi";
 import { loadLatestPlannerOutput } from "./integrations/plannerData";
 import { generateReplyDraftsApi } from "./integrations/draftApi";
 import {
@@ -567,6 +573,93 @@ const workflowTemplates: WorkflowTemplate[] = [
     blockType: "meeting",
   },
 ];
+
+const plannerPlaceholderAvatar =
+  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' rx='48' fill='%23171b19'/%3E%3Ctext x='48' y='57' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='34' font-weight='700' fill='white'%3EAI%3C/text%3E%3C/svg%3E";
+
+function buildPlannerEmailPayload(email: EmailMessage): PlannerApiEmailInput {
+  return {
+    id: email.id,
+    provider: email.provider ?? "google",
+    providerMessageId: email.id,
+    threadId: email.id,
+    fromName: email.from,
+    fromEmail: email.senderEmail ?? null,
+    subject: email.subject,
+    snippet: email.preview,
+    bodyPreview: email.preview,
+    receivedAt: email.receivedAt,
+    labels: email.labels,
+    importance: email.priority === "medium" ? "normal" : email.priority,
+  };
+}
+
+function buildPlannerCalendarPayload(event: CalendarEvent): PlannerApiCalendarInput {
+  return {
+    id: event.id,
+    providerEventId: event.id,
+    title: event.title,
+    description: event.description ?? null,
+    startAt: event.start,
+    endAt: event.end,
+    eventType: event.type,
+    attendees: event.attendees ?? [],
+  };
+}
+
+function mapPlannerActionToTask(
+  item: PlannerApiAction,
+  sourceEmail: EmailMessage | undefined,
+  index: number,
+): ActionItem {
+  return {
+    id: `planner-session-${index}-${item.sourceMessageId ?? item.title}`,
+    sourceEmailId: item.sourceMessageId ?? `planner-session-${index}`,
+    sourceUrl: sourceEmail?.sourceUrl,
+    title: item.title,
+    detail: item.detail,
+    source: sourceEmail?.from ?? "Autopilot-AI",
+    sourceRole: sourceEmail?.role ?? "Planner",
+    sourceAvatar: sourceEmail?.avatar ?? plannerPlaceholderAvatar,
+    sourceSubject: sourceEmail?.subject ?? item.title,
+    sourceProvider: sourceEmail?.provider ?? "google",
+    sourceSenderEmail: sourceEmail?.senderEmail,
+    receivedAt: sourceEmail?.receivedAt ?? new Date().toISOString(),
+    dueAt: item.dueAt || undefined,
+    priority: item.priority,
+    category: item.category,
+    status: item.status,
+    confidence: Math.round(item.confidence),
+    effort: Math.round(item.effortMinutes),
+    impact: Math.round(item.impact),
+    risk: item.risk,
+    labels: item.labels,
+    rankScore: item.rankScore,
+    requiresApproval: item.requiresApproval,
+  };
+}
+
+function mapPlannerBlockToCalendarEvent(
+  block: PlannerApiScheduleBlock,
+  index: number,
+): CalendarEvent {
+  return {
+    id: `planner-session-block-${index}`,
+    title: block.title,
+    start: block.startAt,
+    end: block.endAt,
+    type: normalizePlannerBlockType(block.blockType),
+    provider: "planner",
+    editable: false,
+    description: block.detail,
+  };
+}
+
+function normalizePlannerBlockType(blockType: string): CalendarEventType {
+  return blockType === "meeting" || blockType === "deadline" || blockType === "personal"
+    ? blockType
+    : "focus";
+}
 
 function App() {
   const authRequired = hasSupabaseConfig && import.meta.env.MODE !== "test";
@@ -1305,15 +1398,25 @@ function App() {
     });
     setConnectionNotice(
       result.ok
-        ? `${result.message} ${result.emailCount ?? 0} emails and ${result.calendarEventCount ?? 0} calendar events stored.`
+        ? `${result.message} ${result.emailCount ?? 0} emails and ${result.calendarEventCount ?? 0} calendar events loaded.`
         : `Google sync failed: ${result.message}`,
     );
     if (result.ok) {
       setIsGoogleConnected(true);
       setPlannerActionItems([]);
       setPlannerCalendarEvents([]);
-      setPlannerNotice("Google sync completed. Run the AI planner again to rebuild the Gmail-backed action list.");
-      await refreshWorkspaceData();
+      setWorkspaceSource("live");
+      setWorkspaceEmails(result.emails);
+      setWorkspaceCalendarEvents(result.calendarEvents);
+      setWorkspaceNotice(result.message);
+      setPlannerNotice(
+        result.persisted
+          ? "Google sync completed. Run the AI planner again to rebuild the Gmail-backed action list."
+          : "Google data is loaded for this session. Run the AI planner now while the current Google session is active.",
+      );
+      if (result.persisted) {
+        await refreshWorkspaceData();
+      }
     }
   }
 
@@ -1422,6 +1525,10 @@ function App() {
       date: planningDate,
       timezone: "America/Los_Angeles",
       planningMode: planMode,
+      emails: aiEligibleEmails.map(buildPlannerEmailPayload),
+      calendarEvents: calendarEvents
+        .filter((event) => event.provider !== "planner")
+        .map(buildPlannerCalendarPayload),
     });
     setProductivityNotice(
       result.ok
@@ -1429,7 +1536,19 @@ function App() {
         : `AI planning API failed: ${result.message}`,
     );
     if (result.ok) {
-      await refreshPlannerOutput();
+      const emailById = new Map(workspaceEmails.map((email) => [email.id, email]));
+      setPlannerActionItems(
+        result.actionItems.map((item, index) =>
+          mapPlannerActionToTask(item, item.sourceMessageId ? emailById.get(item.sourceMessageId) : undefined, index),
+        ),
+      );
+      setPlannerCalendarEvents(
+        result.scheduleBlocks.map((block, index) => mapPlannerBlockToCalendarEvent(block, index)),
+      );
+      setPlannerNotice(result.message);
+      if (result.persisted) {
+        await refreshPlannerOutput();
+      }
     }
   }
 
@@ -2086,23 +2205,31 @@ function App() {
             <PageHeader
               eyebrow="Calendar"
               title="Work from a larger daily calendar"
-              body="A Google Calendar-style view keeps the time grid, event colors, agenda, and editable user-scheduled blocks in one focused page."
+              body="A Google Calendar-style view keeps the time grid, event colors, agenda, editable blocks, and calendar AI controls in one focused page."
             />
             <FullCalendarSection
+              assistantMessages={assistantMessages}
               date={planningDate}
+              draftTheme={draftTheme}
               draft={calendarDraft}
               events={calendarEvents}
               notice={calendarNotice}
               preferences={settings.calendar}
+              query={assistantQuery}
+              setupComplete={assistantSetupComplete}
               onCancelDraft={cancelCalendarDraft}
               onCreateDraft={() => {
                 startCalendarDraft(settings.calendar.startHour + 1);
                 setCalendarNotice("Drafting a new calendar block.");
               }}
               onDraftChange={updateCalendarDraft}
+              onDraftThemeChange={setDraftTheme}
               onEditEvent={selectCalendarEvent}
               onJumpToToday={() => setPlanningDate(getLocalDateISO())}
+              onQuickCommand={runAssistantCommand}
               onSaveDraft={saveCalendarDraftItem}
+              onSubmitAssistant={submitAssistantQuery}
+              onAssistantQueryChange={setAssistantQuery}
               onSelectDate={setPlanningDate}
               onSlotClick={openCalendarSlot}
             />
@@ -4378,31 +4505,47 @@ function TaskCard({
 }
 
 function FullCalendarSection({
+  assistantMessages,
   date,
+  draftTheme,
   draft,
   events,
   notice,
   preferences,
+  query,
+  setupComplete,
+  onAssistantQueryChange,
   onCancelDraft,
   onCreateDraft,
   onDraftChange,
+  onDraftThemeChange,
   onEditEvent,
   onJumpToToday,
+  onQuickCommand,
   onSaveDraft,
+  onSubmitAssistant,
   onSelectDate,
   onSlotClick,
 }: {
+  assistantMessages: AssistantMessage[];
   date: string;
+  draftTheme: DraftTheme;
   draft: CalendarDraft | null;
   events: CalendarEvent[];
   notice: string;
   preferences: CalendarPreferences;
+  query: string;
+  setupComplete: boolean;
+  onAssistantQueryChange: (value: string) => void;
   onCancelDraft: () => void;
   onCreateDraft: () => void;
   onDraftChange: (draft: Partial<CalendarDraft>) => void;
+  onDraftThemeChange: (theme: DraftTheme) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onJumpToToday: () => void;
+  onQuickCommand: (query: string) => Promise<void>;
   onSaveDraft: () => void;
+  onSubmitAssistant: (event: FormEvent<HTMLFormElement>) => void;
   onSelectDate: (date: string) => void;
   onSlotClick: (hour: number) => void;
 }) {
@@ -4513,6 +4656,16 @@ function FullCalendarSection({
         </div>
 
         <aside className="full-calendar-side">
+          <CalendarAiPanel
+            assistantMessages={assistantMessages}
+            draftTheme={draftTheme}
+            query={query}
+            setupComplete={setupComplete}
+            onAssistantQueryChange={onAssistantQueryChange}
+            onDraftThemeChange={onDraftThemeChange}
+            onQuickCommand={onQuickCommand}
+            onSubmit={onSubmitAssistant}
+          />
           {preferences.showAgenda ? (
             <section className="full-calendar-agenda" aria-label="Calendar agenda">
               <h3>Agenda</h3>
@@ -4544,6 +4697,95 @@ function FullCalendarSection({
             onSave={onSaveDraft}
           />
         </aside>
+      </div>
+    </section>
+  );
+}
+
+function CalendarAiPanel({
+  assistantMessages,
+  draftTheme,
+  query,
+  setupComplete,
+  onAssistantQueryChange,
+  onDraftThemeChange,
+  onQuickCommand,
+  onSubmit,
+}: {
+  assistantMessages: AssistantMessage[];
+  draftTheme: DraftTheme;
+  query: string;
+  setupComplete: boolean;
+  onAssistantQueryChange: (value: string) => void;
+  onDraftThemeChange: (theme: DraftTheme) => void;
+  onQuickCommand: (query: string) => Promise<void>;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const visibleMessages = assistantMessages.slice(0, 3);
+
+  return (
+    <section className="calendar-ai-panel" aria-labelledby="calendar-ai-title">
+      <div className="rail-heading">
+        <CalendarDays size={18} aria-hidden="true" />
+        <h2 id="calendar-ai-title">Calendar AI</h2>
+      </div>
+      <p className="section-note">
+        Add blocks, protect focus time, or jump into a Gmail draft without leaving the schedule.
+      </p>
+      <div className="calendar-ai-actions">
+        <button
+          className="secondary-action"
+          type="button"
+          onClick={() => void onQuickCommand("Add calendar Deep work tomorrow 3pm to 4pm")}
+        >
+          Protect focus
+        </button>
+        <button
+          className="secondary-action"
+          type="button"
+          onClick={() => void onQuickCommand("Draft a reply for Northstar")}
+        >
+          Draft reply
+        </button>
+      </div>
+      <form className="calendar-ai-form" onSubmit={onSubmit}>
+        <label className="field-label">
+          Calendar assistant request
+          <input
+            aria-label="Calendar assistant request"
+            placeholder="Add calendar Interview prep tomorrow 11am to 11:30am"
+            value={query}
+            onChange={(event) => onAssistantQueryChange(event.target.value)}
+          />
+        </label>
+        <label className="field-label">
+          Draft theme
+          <select
+            aria-label="Calendar assistant draft theme"
+            value={draftTheme}
+            onChange={(event) => onDraftThemeChange(event.target.value as DraftTheme)}
+          >
+            <option value="direct">Direct</option>
+            <option value="warm">Warm</option>
+            <option value="executive">Executive</option>
+          </select>
+        </label>
+        <div className="button-row">
+          <button className="primary-action" type="submit">
+            Run calendar AI
+          </button>
+          <span className="inline-help">
+            {setupComplete ? "Private sender intake saved." : "Finish private sender intake on Daily plan first."}
+          </span>
+        </div>
+      </form>
+      <div className="calendar-ai-feed" aria-label="Calendar AI activity">
+        {visibleMessages.map((message) => (
+          <article className={`assistant-message ${message.kind}`} key={message.id}>
+            <strong>{message.title}</strong>
+            <p>{message.detail}</p>
+          </article>
+        ))}
       </div>
     </section>
   );

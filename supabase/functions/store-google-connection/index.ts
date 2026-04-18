@@ -60,33 +60,40 @@ Deno.serve(async (req) => {
 
   const providerUserId = authData.user.email ?? authData.user.id;
   const accessTokenExpiresAt = new Date(Date.now() + 55 * 60_000).toISOString();
-  let accessTokenCiphertext: string | null = null;
-  let refreshTokenCiphertext: string | undefined;
+  const warnings: string[] = [];
+  let tokenStored = false;
+
   try {
-    accessTokenCiphertext = accessToken ? await encryptToken(accessToken) : null;
-    refreshTokenCiphertext = refreshToken ? await encryptToken(refreshToken) : undefined;
+    const accessTokenCiphertext = accessToken ? await encryptToken(accessToken) : null;
+    const refreshTokenCiphertext = refreshToken ? await encryptToken(refreshToken) : undefined;
+    const vaultRow: Record<string, unknown> = {
+      user_id: authData.user.id,
+      organization_id: organizationId,
+      provider: "google",
+      provider_user_id: providerUserId,
+      access_token_ciphertext: accessTokenCiphertext,
+      access_token_expires_at: accessToken ? accessTokenExpiresAt : null,
+      scopes: Array.isArray(body.scopes) ? body.scopes.map(String) : googleScopes,
+      status: "connected",
+      updated_at: new Date().toISOString(),
+    };
+    if (refreshTokenCiphertext) vaultRow.refresh_token_ciphertext = refreshTokenCiphertext;
+
+    const { error: vaultError } = await serviceClient
+      .from("provider_token_vault")
+      .upsert(vaultRow, { onConflict: "user_id,provider,provider_user_id" });
+    if (vaultError) {
+      warnings.push(`Google token storage is unavailable: ${vaultError.message}`);
+    } else {
+      tokenStored = true;
+    }
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Could not encrypt Google token." }, 500);
+    warnings.push(
+      `Google token storage is unavailable: ${error instanceof Error ? error.message : "Could not encrypt Google token."}`,
+    );
   }
 
-  const vaultRow: Record<string, unknown> = {
-    user_id: authData.user.id,
-    organization_id: organizationId,
-    provider: "google",
-    provider_user_id: providerUserId,
-    access_token_ciphertext: accessTokenCiphertext,
-    access_token_expires_at: accessToken ? accessTokenExpiresAt : null,
-    scopes: Array.isArray(body.scopes) ? body.scopes.map(String) : googleScopes,
-    status: "connected",
-    updated_at: new Date().toISOString(),
-  };
-  if (refreshTokenCiphertext) vaultRow.refresh_token_ciphertext = refreshTokenCiphertext;
-
-  const { error: vaultError } = await serviceClient
-    .from("provider_token_vault")
-    .upsert(vaultRow, { onConflict: "user_id,provider,provider_user_id" });
-  if (vaultError) return json({ error: vaultError.message }, 500);
-
+  let metadataStored = false;
   const { error: metadataError } = await serviceClient.from("connected_accounts").upsert(
     {
       user_id: authData.user.id,
@@ -99,7 +106,11 @@ Deno.serve(async (req) => {
     },
     { onConflict: "user_id,provider,provider_user_id" },
   );
-  if (metadataError) return json({ error: metadataError.message }, 500);
+  if (metadataError) {
+    warnings.push(`Google connection metadata could not be saved: ${metadataError.message}`);
+  } else {
+    metadataStored = true;
+  }
 
   await serviceClient.from("audit_events").insert({
     user_id: authData.user.id,
@@ -108,14 +119,25 @@ Deno.serve(async (req) => {
     action: refreshToken ? "google_connection.stored_refresh_token" : "google_connection.stored_access_token",
     target_type: "connected_account",
     target_id: "google",
-    metadata: { hasRefreshToken: Boolean(refreshToken), hasAccessToken: Boolean(accessToken) },
+    metadata: {
+      hasRefreshToken: Boolean(refreshToken),
+      hasAccessToken: Boolean(accessToken),
+      tokenStored,
+      metadataStored,
+      warnings,
+    },
   });
+
+  const warning = warnings.join(" ").trim() || null;
 
   return json({
     ok: true,
     connected: true,
-    refreshTokenStored: Boolean(refreshToken),
-    accessTokenStored: Boolean(accessToken),
+    refreshTokenStored: tokenStored && Boolean(refreshToken),
+    accessTokenStored: tokenStored && Boolean(accessToken),
+    tokenStored,
+    metadataStored,
+    warning,
   });
 });
 
