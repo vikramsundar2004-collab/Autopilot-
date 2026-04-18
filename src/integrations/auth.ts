@@ -86,6 +86,10 @@ export async function startGoogleLogin(): Promise<ConnectionResult> {
     provider: "google",
     options: {
       redirectTo: getOAuthRedirectUrl(),
+      scopes: "openid email profile",
+      queryParams: {
+        prompt: "select_account",
+      },
     },
   });
   if (error) {
@@ -146,9 +150,30 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
     return null;
   }
   const pendingIntent = consumePendingOAuthIntent();
+  const cleanedLocation = buildPostAuthLocation(url);
+  const errorDescription = url.searchParams.get("error_description") ?? url.searchParams.get("error");
+  if (errorDescription) {
+    replaceCurrentWebCallbackUrl(cleanedLocation);
+    return {
+      ok: false,
+      message: decodeURIComponent(errorDescription.replace(/\+/g, " ")),
+    };
+  }
 
   const code = url.searchParams.get("code");
   if (!code) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData.session) {
+      replaceCurrentWebCallbackUrl(cleanedLocation);
+      return {
+        ok: true,
+        message:
+          pendingIntent === "google-login"
+            ? "Signed in with Google."
+            : "Signed in.",
+      };
+    }
+    replaceCurrentWebCallbackUrl(cleanedLocation);
     return {
       ok: false,
       message: "OAuth callback returned without a code.",
@@ -157,9 +182,11 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
+    replaceCurrentWebCallbackUrl(cleanedLocation);
     return { ok: false, message: error.message };
   }
   if (pendingIntent === "google-workspace" && !data.session?.provider_token) {
+    replaceCurrentWebCallbackUrl(cleanedLocation);
     return {
       ok: false,
       message:
@@ -167,9 +194,7 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
     };
   }
 
-  if (window.location.pathname.includes("/auth/callback")) {
-    window.history.replaceState({}, document.title, "/");
-  }
+  replaceCurrentWebCallbackUrl(cleanedLocation);
   const provider = data.session?.user.app_metadata.provider ?? "provider";
   const tokenResult = await storeGoogleConnection(data.session, pendingIntent);
   if (tokenResult && !tokenResult.ok) {
@@ -268,4 +293,14 @@ function getOAuthRedirectUrl(): string {
   }
 
   return `${getAppUrl()}/auth/callback`;
+}
+
+function buildPostAuthLocation(url: URL): string {
+  return url.hash ? `/${url.hash}` : "/";
+}
+
+function replaceCurrentWebCallbackUrl(cleanedLocation: string): void {
+  if (typeof window === "undefined") return;
+  if (!window.location.pathname.includes("/auth/callback")) return;
+  window.history.replaceState({}, document.title, cleanedLocation);
 }

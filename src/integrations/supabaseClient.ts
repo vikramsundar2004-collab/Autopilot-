@@ -5,13 +5,17 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 
 export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey);
 
+export const supabaseAuthOptions = {
+  detectSessionInUrl: false,
+  flowType: "pkce" as const,
+  persistSession: true,
+};
+
 export const supabase = hasSupabaseConfig
   ? createClient(supabaseUrl!, supabaseAnonKey!, {
-      auth: {
-        detectSessionInUrl: true,
-        flowType: "pkce",
-        persistSession: true,
-      },
+      // The app owns the /auth/callback exchange flow manually so it can support
+      // browser and Capacitor deep-link callbacks without double-consuming the PKCE code.
+      auth: supabaseAuthOptions,
     })
   : null;
 
