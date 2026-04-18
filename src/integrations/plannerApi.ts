@@ -1,6 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { describeFunctionError } from "./functionErrors";
-import { getFunctionAuthorizationHeaders } from "./functionAuth";
+import { invokeEdgeFunction } from "./functionAuth";
 
 export interface PlannerApiRequest {
   date?: string;
@@ -98,10 +98,7 @@ export async function runDailyPlanner(
     };
   }
 
-  const headers = await getFunctionAuthorizationHeaders();
-
-  const { data, error } = await supabase.functions.invoke("plan-day", {
-    ...(headers ? { headers } : {}),
+  const { data, error } = await invokeEdgeFunction<any>("plan-day", {
     body: request,
   });
 

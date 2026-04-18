@@ -1,5 +1,5 @@
 import { describeFunctionError } from "./functionErrors";
-import { getFunctionAuthorizationHeaders } from "./functionAuth";
+import { invokeEdgeFunction } from "./functionAuth";
 import { supabase } from "./supabaseClient";
 
 export type EnterpriseRole = "owner" | "admin" | "member" | "viewer";
@@ -293,10 +293,10 @@ export async function joinEnterpriseWithKey(
     return { ok: false, message: "Enter an enterprise key." };
   }
 
-  const headers = await getFunctionAuthorizationHeaders();
-
-  const { data, error } = await supabase.functions.invoke("join-enterprise", {
-    ...(headers ? { headers } : {}),
+  const { data, error } = await invokeEdgeFunction<{
+    message?: string;
+    organization?: unknown;
+  }>("join-enterprise", {
     body: { joinKey: normalizedJoinKey },
   });
 
@@ -383,10 +383,10 @@ export async function analyzeEnterpriseChat(input: {
     return { ok: false, message: "Add Supabase env vars before running the enterprise assistant." };
   }
 
-  const headers = await getFunctionAuthorizationHeaders();
-
-  const { data, error } = await supabase.functions.invoke("enterprise-chat-assistant", {
-    ...(headers ? { headers } : {}),
+  const { data, error } = await invokeEdgeFunction<{
+    message?: string;
+    assignments?: unknown[];
+  }>("enterprise-chat-assistant", {
     body: input,
   });
 

@@ -10,7 +10,7 @@ import {
   type CalendarEventRow,
   type EmailMessageRow,
 } from "./workspaceData";
-import { getFunctionAuthorizationHeaders } from "./functionAuth";
+import { invokeEdgeFunction } from "./functionAuth";
 import { supabase } from "./supabaseClient";
 
 export type GoogleWorkspaceConnectionState =
@@ -100,10 +100,16 @@ export async function syncGoogleWorkspace(
 
   const session = sessionData.session as (typeof sessionData.session & { provider_token?: string }) | null;
   const providerAccessToken = session?.provider_token;
-  const headers = await getFunctionAuthorizationHeaders(session?.access_token);
 
-  const { data, error } = await supabase.functions.invoke("sync-google-workspace", {
-    ...(headers ? { headers } : {}),
+  const { data, error } = await invokeEdgeFunction<{
+    message?: string;
+    persisted?: boolean;
+    emailCount?: number;
+    calendarEventCount?: number;
+    emailRows?: EmailMessageRow[];
+    calendarRows?: CalendarEventRow[];
+  }>("sync-google-workspace", {
+    accessToken: session?.access_token,
     body: {
       ...request,
       ...(providerAccessToken ? { providerAccessToken } : {}),
@@ -160,10 +166,10 @@ export async function syncMicrosoftWorkspace(
     };
   }
 
-  const headers = await getFunctionAuthorizationHeaders();
-
-  const { data, error } = await supabase.functions.invoke("sync-microsoft-workspace", {
-    ...(headers ? { headers } : {}),
+  const { data, error } = await invokeEdgeFunction<{
+    emailCount?: number;
+    calendarEventCount?: number;
+  }>("sync-microsoft-workspace", {
     body: request,
   });
 

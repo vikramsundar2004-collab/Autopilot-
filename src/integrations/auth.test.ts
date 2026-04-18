@@ -2,18 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   exchangeCodeForSessionMock,
-  getFunctionAuthorizationHeadersMock,
   getSessionMock,
-  invokeMock,
+  invokeEdgeFunctionMock,
   linkIdentityMock,
   signInWithOAuthMock,
   signInWithOtpMock,
   signOutMock,
 } = vi.hoisted(() => ({
   exchangeCodeForSessionMock: vi.fn(),
-  getFunctionAuthorizationHeadersMock: vi.fn(),
   getSessionMock: vi.fn(),
-  invokeMock: vi.fn(),
+  invokeEdgeFunctionMock: vi.fn(),
   linkIdentityMock: vi.fn(),
   signInWithOAuthMock: vi.fn(),
   signInWithOtpMock: vi.fn(),
@@ -21,7 +19,7 @@ const {
 }));
 
 vi.mock("./functionAuth", () => ({
-  getFunctionAuthorizationHeaders: getFunctionAuthorizationHeadersMock,
+  invokeEdgeFunction: invokeEdgeFunctionMock,
 }));
 
 vi.mock("./supabaseClient", () => ({
@@ -35,9 +33,6 @@ vi.mock("./supabaseClient", () => ({
       signInWithOAuth: signInWithOAuthMock,
       signInWithOtp: signInWithOtpMock,
       signOut: signOutMock,
-    },
-    functions: {
-      invoke: invokeMock,
     },
   },
 }));
@@ -54,19 +49,15 @@ describe("auth integration helpers", () => {
   beforeEach(() => {
     window.localStorage.clear();
     exchangeCodeForSessionMock.mockReset();
-    getFunctionAuthorizationHeadersMock.mockReset();
     getSessionMock.mockReset();
-    invokeMock.mockReset();
+    invokeEdgeFunctionMock.mockReset();
     linkIdentityMock.mockReset();
     signInWithOAuthMock.mockReset();
     signInWithOtpMock.mockReset();
     signOutMock.mockReset();
 
     getSessionMock.mockResolvedValue({ data: { session: null } });
-    getFunctionAuthorizationHeadersMock.mockResolvedValue({
-      Authorization: "Bearer supabase-access-token",
-    });
-    invokeMock.mockResolvedValue({
+    invokeEdgeFunctionMock.mockResolvedValue({
       data: { connected: true, refreshTokenStored: true },
       error: null,
     });
@@ -114,13 +105,10 @@ describe("auth integration helpers", () => {
 
     const result = await storeGoogleConnection(session, "google");
 
-    expect(getFunctionAuthorizationHeadersMock).toHaveBeenCalledWith("supabase-access-token");
-    expect(invokeMock).toHaveBeenCalledWith(
+    expect(invokeEdgeFunctionMock).toHaveBeenCalledWith(
       "store-google-connection",
       expect.objectContaining({
-        headers: {
-          Authorization: "Bearer supabase-access-token",
-        },
+        accessToken: "supabase-access-token",
         body: expect.objectContaining({
           providerAccessToken: "google-access-token",
           providerRefreshToken: "google-refresh-token",

@@ -1,7 +1,7 @@
 import type { DraftTheme } from "../emailDrafts";
 import type { EmailPriority, TaskCategory } from "../types";
 import { describeFunctionError } from "./functionErrors";
-import { getFunctionAuthorizationHeaders } from "./functionAuth";
+import { invokeEdgeFunction } from "./functionAuth";
 import { supabase } from "./supabaseClient";
 
 export interface DraftApiEmail {
@@ -50,10 +50,11 @@ export async function generateReplyDraftsApi(input: {
     };
   }
 
-  const headers = await getFunctionAuthorizationHeaders();
-
-  const { data, error } = await supabase.functions.invoke("draft-email", {
-    ...(headers ? { headers } : {}),
+  const { data, error } = await invokeEdgeFunction<{
+    message?: string;
+    source?: "openai" | "fallback";
+    drafts?: Array<{ sourceMessageId?: string; subject?: string; body?: string; reason?: string }>;
+  }>("draft-email", {
     body: input,
   });
 

@@ -2,7 +2,7 @@ import { Capacitor } from "@capacitor/core";
 import type { Session } from "@supabase/supabase-js";
 import type { IntegrationKey } from "./providers";
 import { describeFunctionError } from "./functionErrors";
-import { getFunctionAuthorizationHeaders } from "./functionAuth";
+import { invokeEdgeFunction } from "./functionAuth";
 import { getProviderByKey, googleScopes } from "./providers";
 import { getAppUrl, hasSupabaseConfig, supabase } from "./supabaseClient";
 
@@ -238,10 +238,13 @@ export async function storeGoogleConnection(
 ): Promise<ConnectionResult | null> {
   if (!supabase || !session?.provider_token) return null;
   if (!shouldStoreGoogleConnection(session, pendingIntent)) return null;
-  const headers = await getFunctionAuthorizationHeaders(session.access_token);
 
-  const { data, error } = await supabase.functions.invoke("store-google-connection", {
-    ...(headers ? { headers } : {}),
+  const { data, error } = await invokeEdgeFunction<{
+    connected?: boolean;
+    refreshTokenStored?: boolean;
+    warning?: string | null;
+  }>("store-google-connection", {
+    accessToken: session.access_token,
     body: {
       providerAccessToken: session.provider_token,
       providerRefreshToken: session.provider_refresh_token,
