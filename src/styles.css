@@ -106,11 +106,14 @@ a {
 }
 
 .app-shell.density-compact .command-band,
+.app-shell.density-compact .handoff-panel,
 .app-shell.density-compact .integration-panel,
+.app-shell.density-compact .momentum-panel,
 .app-shell.density-compact .customize-panel,
 .app-shell.density-compact .hidden-section-notice,
 .app-shell.density-compact .premium-panel,
 .app-shell.density-compact .productivity-panel,
+.app-shell.density-compact .rescue-panel,
 .app-shell.density-compact .setup-panel,
 .app-shell.density-compact .task-section,
 .app-shell.density-compact .rail-section,
@@ -129,11 +132,14 @@ a {
 }
 
 .app-shell.density-spacious .command-band,
+.app-shell.density-spacious .handoff-panel,
 .app-shell.density-spacious .integration-panel,
+.app-shell.density-spacious .momentum-panel,
 .app-shell.density-spacious .customize-panel,
 .app-shell.density-spacious .hidden-section-notice,
 .app-shell.density-spacious .premium-panel,
 .app-shell.density-spacious .productivity-panel,
+.app-shell.density-spacious .rescue-panel,
 .app-shell.density-spacious .setup-panel,
 .app-shell.density-spacious .task-section,
 .app-shell.density-spacious .rail-section,
@@ -186,6 +192,33 @@ a {
 .auth-note {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.auth-links,
+.sidebar-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.auth-links a,
+.sidebar-links a {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.auth-links a:hover,
+.sidebar-links a:hover {
+  border-color: rgba(31, 138, 104, 0.35);
+  color: var(--ink);
+}
+
+.auth-links {
+  margin-top: 18px;
 }
 
 .google-login-button {
@@ -316,6 +349,11 @@ a {
   background: #e7f0ea;
   cursor: pointer;
   font-weight: 700;
+}
+
+.sidebar-links {
+  margin-top: 14px;
+  margin-bottom: 18px;
 }
 
 .sidebar-signout {
@@ -483,6 +521,7 @@ h3 {
 .top-header p,
 .section-note,
 .task-body p,
+.integration-detail,
 .integration-card p,
 .guardrail-list,
 .rescue-plan p {
@@ -539,11 +578,14 @@ h3 {
 .command-band,
 .customize-panel,
 .full-calendar-section,
+.handoff-panel,
 .hidden-section-notice,
 .integration-panel,
 .improvement-section,
+.momentum-panel,
 .premium-panel,
 .productivity-panel,
+.rescue-panel,
 .setup-panel,
 .task-section,
 .rail-section {
@@ -608,11 +650,14 @@ h3 {
 
 .integration-panel,
 .improvement-section,
+.handoff-panel,
 .customize-panel,
 .full-calendar-section,
 .hidden-section-notice,
+.momentum-panel,
 .premium-panel,
 .productivity-panel,
+.rescue-panel,
 .setup-panel,
 .task-section,
 .rail-section {
@@ -726,6 +771,47 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.source-proof-list,
+.template-gallery {
+  display: grid;
+  gap: 12px;
+}
+
+.source-proof-card,
+.template-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.source-proof-card.empty {
+  background: #f8fafb;
+}
+
+.source-proof-card span,
+.template-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+}
+
+.source-proof-card p,
+.template-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.template-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .premium-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
@@ -761,6 +847,11 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.integration-detail {
+  margin: 0;
+  font-size: 0.88rem;
 }
 
 .integration-card.green {
@@ -1165,6 +1256,19 @@ h3 {
   font: inherit;
 }
 
+.field-label textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #ffffff;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 .customize-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1273,6 +1377,17 @@ h3 {
   line-height: 1.3;
 }
 
+.rescue-panel .status-pill,
+.handoff-panel .status-pill,
+.momentum-panel .status-pill {
+  max-width: 420px;
+  min-height: 34px;
+  height: auto;
+  padding: 8px 10px;
+  white-space: normal;
+  line-height: 1.3;
+}
+
 .productivity-card {
   display: grid;
   align-content: start;
@@ -1294,6 +1409,10 @@ h3 {
 
 .productivity-card:nth-child(3) {
   background: #fff8f1;
+}
+
+.productivity-card:nth-child(4) {
+  background: #f7f6ff;
 }
 
 .productivity-card p {
@@ -1320,6 +1439,268 @@ h3 {
 }
 
 .quick-capture .secondary-action {
+  margin-top: 0;
+}
+
+.rescue-panel,
+.momentum-panel,
+.handoff-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.playbook-grid,
+.momentum-layout,
+.handoff-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.playbook-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.playbook-card,
+.momentum-stat-card,
+.milestone-card,
+.handoff-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.playbook-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.playbook-card:nth-child(4n + 1) {
+  background: #f6fbff;
+}
+
+.playbook-card:nth-child(4n + 2) {
+  background: #f7fff9;
+}
+
+.playbook-card:nth-child(4n + 3) {
+  background: #fff8f1;
+}
+
+.playbook-card:nth-child(4n + 4) {
+  background: #fff7fa;
+}
+
+.playbook-card.recommended {
+  border-color: rgba(31, 138, 104, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(31, 138, 104, 0.12);
+}
+
+.playbook-topline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.playbook-topline span,
+.task-state {
+  width: max-content;
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.playbook-topline span {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.playbook-card p,
+.playbook-trigger,
+.milestone-copy span,
+.momentum-event p,
+.handoff-copy span,
+.handoff-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.playbook-task-list {
+  display: grid;
+  gap: 6px;
+}
+
+.playbook-task-list span {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.momentum-layout {
+  grid-template-columns: minmax(0, 1.08fr) minmax(280px, 0.92fr);
+}
+
+.momentum-column,
+.handoff-list {
+  display: grid;
+  gap: 12px;
+}
+
+.momentum-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.momentum-stat-card {
+  padding: 14px;
+}
+
+.momentum-stat-card:nth-child(1) {
+  background: #f6fbff;
+}
+
+.momentum-stat-card:nth-child(2) {
+  background: #f7fff9;
+}
+
+.momentum-stat-card:nth-child(3) {
+  background: #fff8f1;
+}
+
+.momentum-stat-card:nth-child(4) {
+  background: #fff7fa;
+}
+
+.momentum-stat-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.momentum-stat-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.5rem;
+}
+
+.milestone-list {
+  display: grid;
+  gap: 10px;
+}
+
+.milestone-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.milestone-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.milestone-meta {
+  display: grid;
+  gap: 8px;
+}
+
+.milestone-meta span,
+.momentum-event span {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  font-size: 0.76rem;
+}
+
+.milestone-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ece6;
+}
+
+.milestone-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), var(--info));
+}
+
+.momentum-feed {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.momentum-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.momentum-event:last-child {
+  border-bottom: 0;
+}
+
+.momentum-event.playbook strong {
+  color: var(--primary-strong);
+}
+
+.momentum-event.handoff strong {
+  color: var(--info);
+}
+
+.handoff-layout {
+  grid-template-columns: minmax(280px, 0.88fr) minmax(0, 1.12fr);
+}
+
+.handoff-form {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.handoff-form .primary-action {
+  width: auto;
+}
+
+.handoff-list {
+  min-width: 0;
+}
+
+.handoff-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.handoff-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.handoff-card .secondary-action {
+  width: auto;
   margin-top: 0;
 }
 
@@ -1479,6 +1860,21 @@ h3 {
   gap: 12px;
 }
 
+.task-empty-state {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: #f8fafb;
+}
+
+.task-empty-state p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .task-card {
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr);
@@ -1523,6 +1919,26 @@ h3 {
   align-items: start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.task-state {
+  display: inline-flex;
+  margin-top: 10px;
+}
+
+.task-state.open {
+  color: var(--primary-strong);
+  background: #e7f0ea;
+}
+
+.task-state.waiting {
+  color: #6d4f15;
+  background: #fff3d6;
+}
+
+.task-state.done {
+  color: var(--muted);
+  background: #eef2ed;
 }
 
 .priority {
@@ -1668,12 +2084,19 @@ h3 {
 }
 
 .calendar-day {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  font: inherit;
   display: grid;
   place-items: center;
   gap: 4px;
   min-height: 48px;
   border-radius: 8px;
   color: var(--muted);
+  background: transparent;
+  cursor: pointer;
 }
 
 .calendar-day span {
@@ -1701,6 +2124,12 @@ h3 {
   background: var(--primary);
 }
 
+.calendar-day:disabled,
+.calendar-toolbar button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .full-calendar-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
@@ -1709,6 +2138,12 @@ h3 {
 
 .full-calendar-main {
   min-width: 0;
+}
+
+.full-calendar-side {
+  display: grid;
+  gap: 14px;
+  align-self: start;
 }
 
 .calendar-toolbar {
@@ -1777,9 +2212,35 @@ h3 {
   text-align: right;
 }
 
-.calendar-time-row div {
+.calendar-slot-button {
+  display: flex;
+  align-items: start;
+  justify-content: flex-end;
+  width: 100%;
+  padding: 8px 10px 0 0;
   border-left: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.calendar-slot-button span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(23, 23, 23, 0.05);
+  font-size: 0.72rem;
+}
+
+.calendar-slot-button:hover span,
+.calendar-slot-button:focus-visible span {
+  color: var(--primary-strong);
+  background: rgba(31, 138, 104, 0.14);
 }
 
 .calendar-events-layer {
@@ -1801,6 +2262,8 @@ h3 {
   border-radius: 8px;
   color: #1c3f7a;
   background: #e8f0fe;
+  cursor: pointer;
+  text-align: left;
 }
 
 .calendar-day-grid.full .calendar-event-block {
@@ -1815,6 +2278,11 @@ h3 {
 
 .calendar-event-block span {
   font-size: 0.68rem;
+}
+
+.calendar-event-block small {
+  font-size: 0.68rem;
+  opacity: 0.82;
 }
 
 .calendar-event-block.focus {
@@ -1879,6 +2347,25 @@ h3 {
   margin-bottom: 8px;
 }
 
+.calendar-editor-panel {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.calendar-editor-form,
+.calendar-editor-empty {
+  display: grid;
+  gap: 12px;
+}
+
+.calendar-editor-empty p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .rail-heading {
   gap: 8px;
   margin-bottom: 14px;
@@ -1916,6 +2403,23 @@ h3 {
 
 .event-row small {
   color: var(--muted);
+}
+
+.agenda-action {
+  justify-self: start;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--primary-strong);
+  background: #f6fbf8;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.agenda-empty {
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .event-row.focus {
@@ -2052,7 +2556,11 @@ h3 {
   .behavior-grid,
   .customize-grid,
   .full-calendar-layout,
+  .handoff-layout,
   .hidden-section-notice,
+  .momentum-layout,
+  .momentum-stats,
+  .playbook-grid,
   .premium-grid,
   .productivity-grid,
   .capture-row,
@@ -2094,11 +2602,14 @@ h3 {
   .sidebar,
   .customize-panel,
   .full-calendar-section,
+  .handoff-panel,
   .hidden-section-notice,
   .integration-panel,
   .improvement-section,
+  .momentum-panel,
   .premium-panel,
   .productivity-panel,
+  .rescue-panel,
   .setup-panel,
   .task-section,
   .rail-section,

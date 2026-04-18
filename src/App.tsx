@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { demoCalendar, demoDate, demoEmails } from "./data";
+import { loadManualCalendarEvents, saveManualCalendarEvents } from "./calendarStore";
 import {
   buildBehaviorActions,
   buildShareStateUrl,
@@ -53,6 +54,13 @@ import {
   syncGoogleWorkspace,
 } from "./integrations/workspaceSyncApi";
 import {
+  buildLocalDayRange,
+  getLocalDateISO,
+  loadWorkspaceData,
+  localDateFromIso,
+  type WorkspaceDataSource,
+} from "./integrations/workspaceData";
+import {
   getConnectionReadiness,
   integrationProviders,
   type IntegrationKey,
@@ -76,7 +84,15 @@ import {
   type VisualTheme,
   type WorkspacePageKey,
 } from "./preferences";
-import type { ActionItem, CalendarEvent, EmailPriority, TaskStatus } from "./types";
+import type {
+  ActionItem,
+  CalendarEvent,
+  CalendarEventType,
+  EmailMessage,
+  EmailPriority,
+  TaskCategory,
+  TaskStatus,
+} from "./types";
 
 type TaskFilter = "all" | "urgent" | "waiting" | "done";
 type ImprovementFilter = "all" | ImprovementCapability;
@@ -218,6 +234,207 @@ const tutorialSteps = [
   },
 ] as const;
 
+interface PlaybookTaskBlueprint {
+  title: string;
+  detail: string;
+  effort: number;
+  priority: EmailPriority;
+  category: TaskCategory;
+  impact: number;
+  labels: string[];
+}
+
+interface RescuePlaybook {
+  id: string;
+  title: string;
+  summary: string;
+  trigger: string;
+  duration: number;
+  mode: PlanMode;
+  outcome: string;
+  tasks: PlaybookTaskBlueprint[];
+}
+
+interface ActivatedPlaybook {
+  id: string;
+  playbookId: string;
+  title: string;
+  activatedAt: string;
+  outcome: string;
+  createdTaskIds: string[];
+}
+
+type MomentumKind = "playbook" | "win" | "handoff";
+type HandoffChannel = "email" | "slack" | "link";
+
+interface MomentumEvent {
+  id: string;
+  kind: MomentumKind;
+  title: string;
+  detail: string;
+  createdAt: string;
+}
+
+interface TeamHandoff {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  owner: string;
+  note: string;
+  channel: HandoffChannel;
+  sharedAt: string;
+  shareUrl: string;
+}
+
+interface MilestoneProgress {
+  id: string;
+  title: string;
+  detail: string;
+  target: number;
+  current: number;
+  complete: boolean;
+}
+
+const rescuePlaybooks: RescuePlaybook[] = [
+  {
+    id: "inbox-reset",
+    title: "Inbox reset",
+    summary: "Shrink overload into the next three moves and one protected follow-up window.",
+    trigger: "Best when urgent mail is stacking up and context-switching is getting expensive.",
+    duration: 25,
+    mode: "quickWins",
+    outcome: "Urgent inbox work is compressed into a tighter response block.",
+    tasks: [
+      {
+        title: "Reply to the top urgent thread",
+        detail: "Send the shortest useful answer so the highest-risk conversation moves again.",
+        effort: 15,
+        priority: "urgent",
+        category: "reply",
+        impact: 8,
+        labels: ["playbook", "inbox"],
+      },
+      {
+        title: "Convert loose asks into follow-ups",
+        detail: "Pull the next commitments out of the inbox before they get buried again.",
+        effort: 10,
+        priority: "high",
+        category: "follow-up",
+        impact: 7,
+        labels: ["playbook", "triage"],
+      },
+    ],
+  },
+  {
+    id: "meeting-defense",
+    title: "Meeting defense",
+    summary: "Get ahead of the next meeting so it stops fragmenting the rest of the day.",
+    trigger: "Best when the calendar is full and prep debt is creating stress.",
+    duration: 20,
+    mode: "impact",
+    outcome: "Upcoming meetings become decision-ready instead of stealing more time later.",
+    tasks: [
+      {
+        title: "Write the next meeting brief",
+        detail: "Capture goals, decisions needed, and what must happen before the call starts.",
+        effort: 15,
+        priority: "high",
+        category: "review",
+        impact: 8,
+        labels: ["playbook", "meeting"],
+      },
+      {
+        title: "Draft post-meeting follow-up bullets",
+        detail: "Prepare the send-now notes so the meeting does not create hidden cleanup work.",
+        effort: 10,
+        priority: "medium",
+        category: "send",
+        impact: 6,
+        labels: ["playbook", "meeting"],
+      },
+    ],
+  },
+  {
+    id: "deep-work-recovery",
+    title: "Deep work recovery",
+    summary: "Protect one real block of concentration and push noise out of the way.",
+    trigger: "Best when the day feels reactive and nothing important is getting finished.",
+    duration: 45,
+    mode: "deepWork",
+    outcome: "The day regains one meaningful block for higher-leverage work.",
+    tasks: [
+      {
+        title: "Protect one uninterrupted block",
+        detail: "Reserve the next available focus window for the highest-leverage unfinished work.",
+        effort: 30,
+        priority: "high",
+        category: "schedule",
+        impact: 9,
+        labels: ["playbook", "focus"],
+      },
+      {
+        title: "Send delay note on low-impact replies",
+        detail: "Move non-critical conversations out of the current hour with a short expectation-setting note.",
+        effort: 10,
+        priority: "medium",
+        category: "send",
+        impact: 6,
+        labels: ["playbook", "focus"],
+      },
+    ],
+  },
+  {
+    id: "delegation-sweep",
+    title: "Delegation sweep",
+    summary: "Move blocked work to the right owner before it keeps occupying headspace.",
+    trigger: "Best when the plan is clogged by tasks that should be waiting on someone else.",
+    duration: 15,
+    mode: "quickWins",
+    outcome: "Blocked tasks become explicit handoffs with an owner and next check-in.",
+    tasks: [
+      {
+        title: "Draft the next owner handoff",
+        detail: "Turn one blocked task into a clean owner brief with deadline and context.",
+        effort: 10,
+        priority: "high",
+        category: "follow-up",
+        impact: 7,
+        labels: ["playbook", "handoff"],
+      },
+      {
+        title: "Set the return checkpoint",
+        detail: "Pick the exact moment to check whether the delegated work has moved.",
+        effort: 5,
+        priority: "medium",
+        category: "schedule",
+        impact: 6,
+        labels: ["playbook", "handoff"],
+      },
+    ],
+  },
+];
+
+const milestoneBlueprints = [
+  {
+    id: "first-relief",
+    title: "First relief",
+    detail: "Activate one rescue playbook to stop the day from staying reactive.",
+    target: 1,
+  },
+  {
+    id: "real-progress",
+    title: "Real progress",
+    detail: "Close two meaningful tasks instead of letting them hover.",
+    target: 2,
+  },
+  {
+    id: "load-shifted",
+    title: "Load shifted",
+    detail: "Hand off one task so your own queue gets lighter, not just busier.",
+    target: 1,
+  },
+] as const;
+
 interface AppliedBehavior {
   id: string;
   label: string;
@@ -237,8 +454,80 @@ interface SavedPreset {
   instruction: string;
 }
 
+interface CalendarDraft {
+  id?: string;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  type: CalendarEventType;
+}
+
+interface WorkflowTemplate {
+  id: string;
+  title: string;
+  detail: string;
+  mode: PlanMode;
+  category: TaskCategory;
+  priority: EmailPriority;
+  labels: string[];
+  defaultMinutes: number;
+  blockType: CalendarEventType;
+}
+
+const workflowTemplates: WorkflowTemplate[] = [
+  {
+    id: "exec-brief",
+    title: "Executive brief follow-up",
+    detail: "Turn a leadership thread into one approval, one reply, and one checkpoint so nothing urgent floats.",
+    mode: "impact",
+    category: "follow-up",
+    priority: "high",
+    labels: ["template", "executive"],
+    defaultMinutes: 20,
+    blockType: "meeting",
+  },
+  {
+    id: "customer-save",
+    title: "Customer escalation response",
+    detail: "Create a response block, a handoff-ready note, and a same-day checkpoint for the account.",
+    mode: "quickWins",
+    category: "reply",
+    priority: "urgent",
+    labels: ["template", "customer"],
+    defaultMinutes: 30,
+    blockType: "focus",
+  },
+  {
+    id: "meeting-prep",
+    title: "Meeting prep sprint",
+    detail: "Reserve prep time, capture the decision needed, and make the next meeting less expensive.",
+    mode: "deepWork",
+    category: "review",
+    priority: "high",
+    labels: ["template", "meeting"],
+    defaultMinutes: 25,
+    blockType: "focus",
+  },
+  {
+    id: "hiring-loop",
+    title: "Hiring loop coordination",
+    detail: "Bundle availability review, interview scheduling, and candidate follow-up into one reusable pattern.",
+    mode: "quickWins",
+    category: "schedule",
+    priority: "medium",
+    labels: ["template", "hiring"],
+    defaultMinutes: 20,
+    blockType: "meeting",
+  },
+];
+
 function App() {
   const authRequired = hasSupabaseConfig && import.meta.env.MODE !== "test";
+  const previewMode = !authRequired;
+  const [planningDate, setPlanningDate] = useState(() =>
+    previewMode ? demoDate : getLocalDateISO(),
+  );
   const [initialState] = useState(() => ({
     settings: loadCustomizationSettings(),
     tutorial: loadTutorialState(),
@@ -247,7 +536,7 @@ function App() {
   const [isAuthReady, setIsAuthReady] = useState(!authRequired);
   const [authNotice, setAuthNotice] = useState(
     hasSupabaseConfig
-      ? "Use Google once to connect Gmail and Calendar."
+      ? "Sign in first. Then connect Gmail and Calendar from Sources."
       : "Add Supabase env vars before testing login.",
   );
   const [loginEmail, setLoginEmail] = useState("");
@@ -261,6 +550,20 @@ function App() {
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
   const [manualTasks, setManualTasks] = useState<ActionItem[]>([]);
+  const [activatedPlaybooks, setActivatedPlaybooks] = useState<ActivatedPlaybook[]>([]);
+  const [momentumEvents, setMomentumEvents] = useState<MomentumEvent[]>([]);
+  const [delegatedTaskIds, setDelegatedTaskIds] = useState<Set<string>>(new Set());
+  const [teamHandoffs, setTeamHandoffs] = useState<TeamHandoff[]>([]);
+  const [handoffTaskId, setHandoffTaskId] = useState("");
+  const [handoffOwner, setHandoffOwner] = useState("");
+  const [handoffNote, setHandoffNote] = useState("");
+  const [handoffChannel, setHandoffChannel] = useState<HandoffChannel>("email");
+  const [rescueNotice, setRescueNotice] = useState(
+    "Use a rescue playbook to turn a crowded day into the next few useful moves.",
+  );
+  const [handoffNotice, setHandoffNotice] = useState(
+    "Create a handoff when a task should stop living in your head.",
+  );
   const [planMode, setPlanMode] = useState<PlanMode>(
     initialState.settings.productivity.defaultPlanMode,
   );
@@ -271,11 +574,47 @@ function App() {
   const [capturePriority, setCapturePriority] = useState<EmailPriority>("medium");
   const [activeSprintId, setActiveSprintId] = useState("");
   const [productivityNotice, setProductivityNotice] = useState("Ready to plan the next hour.");
+  const [calendarNotice, setCalendarNotice] = useState(
+    "Tap the grid to add a block you control, or open one of your own items to move it.",
+  );
   const [connectionNotice, setConnectionNotice] = useState(
     "Add Supabase env vars when you are ready to test live OAuth.",
   );
+  const [workspaceSource, setWorkspaceSource] = useState<WorkspaceDataSource>(
+    previewMode ? "demo" : "empty",
+  );
+  const [workspaceNotice, setWorkspaceNotice] = useState(
+    previewMode
+      ? "Preview mode is using demo inbox and calendar data."
+      : "Sign in, then connect Gmail and Calendar from Sources before syncing live data.",
+  );
+  const [workspaceEmails, setWorkspaceEmails] = useState<EmailMessage[]>(
+    previewMode ? demoEmails : [],
+  );
+  const [workspaceCalendarEvents, setWorkspaceCalendarEvents] = useState<CalendarEvent[]>(
+    previewMode ? demoCalendar : [],
+  );
+  const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
+  const [manualCalendarEvents, setManualCalendarEvents] = useState<CalendarEvent[]>(() =>
+    loadManualCalendarEvents(),
+  );
+  const [calendarDraft, setCalendarDraft] = useState<CalendarDraft | null>(null);
 
-  const baseTasks = useMemo(() => deriveActionItems(demoEmails, demoDate), []);
+  const visibleManualCalendarEvents = useMemo(
+    () => manualCalendarEvents.filter((event) => localDateFromIso(event.start) === planningDate),
+    [manualCalendarEvents, planningDate],
+  );
+  const calendarEvents = useMemo(
+    () =>
+      [...workspaceCalendarEvents, ...visibleManualCalendarEvents].sort(
+        (left, right) => new Date(left.start).getTime() - new Date(right.start).getTime(),
+      ),
+    [visibleManualCalendarEvents, workspaceCalendarEvents],
+  );
+  const baseTasks = useMemo(
+    () => deriveActionItems(workspaceEmails, planningDate),
+    [planningDate, workspaceEmails],
+  );
   const tasks = useMemo(
     () =>
       [...baseTasks, ...manualTasks].map((task) =>
@@ -284,15 +623,27 @@ function App() {
               ...task,
               status: "done" as TaskStatus,
             }
+          : delegatedTaskIds.has(task.id)
+            ? {
+                ...task,
+                status: "waiting" as TaskStatus,
+              }
           : task,
       ),
-    [baseTasks, completedTasks, manualTasks],
+    [baseTasks, completedTasks, delegatedTaskIds, manualTasks],
   );
-  const plan = useMemo(() => buildDailyPlan(tasks, demoCalendar, demoDate), [tasks]);
+  const plan = useMemo(
+    () => buildDailyPlan(tasks, calendarEvents, planningDate),
+    [calendarEvents, planningDate, tasks],
+  );
   const summary = useMemo(() => summarizePlan(plan), [plan]);
   const orderedTasks = useMemo(
     () => prioritizeTasksForMode(plan.rankedTasks, planMode),
     [plan.rankedTasks, planMode],
+  );
+  const sourceCount = useMemo(
+    () => new Set(orderedTasks.map((task) => task.source)).size,
+    [orderedTasks],
   );
   const nextSprintTask = orderedTasks.find((task) => task.status === "open");
   const activeSprintTask =
@@ -304,6 +655,28 @@ function App() {
   const deepWork = orderedTasks
     .filter((task) => task.status === "open" && task.effort >= 25)
     .slice(0, 3);
+  const openHandoffTasks = useMemo(
+    () => orderedTasks.filter((task) => task.status === "open"),
+    [orderedTasks],
+  );
+  const activatedPlaybookIds = useMemo(
+    () => new Set(activatedPlaybooks.map((playbook) => playbook.playbookId)),
+    [activatedPlaybooks],
+  );
+  const completedCount = orderedTasks.filter((task) => task.status === "done").length;
+  const milestones = useMemo(
+    () =>
+      buildMilestones({
+        playbookCount: activatedPlaybooks.length,
+        completedCount,
+        handoffCount: teamHandoffs.length,
+      }),
+    [activatedPlaybooks.length, completedCount, teamHandoffs.length],
+  );
+  const recommendedPlaybookId = useMemo(
+    () => selectRecommendedPlaybook(summary, plan.conflicts.length, orderedTasks),
+    [orderedTasks, plan.conflicts.length, summary],
+  );
 
   const filteredTasks = orderedTasks.filter((task) => {
     if (filter === "all") return true;
@@ -320,9 +693,34 @@ function App() {
     done: orderedTasks.filter((task) => task.status === "done").length,
   };
 
+  useEffect(() => {
+    saveManualCalendarEvents(manualCalendarEvents);
+  }, [manualCalendarEvents]);
+
   async function refreshGoogleConnectionStatus() {
     const status = await getGoogleWorkspaceConnectionStatus();
     setIsGoogleConnected(status.connected);
+  }
+
+  async function refreshWorkspaceData() {
+    if (!authSession && !previewMode) {
+      setWorkspaceSource("empty");
+      setWorkspaceEmails([]);
+      setWorkspaceCalendarEvents([]);
+      setWorkspaceNotice("Sign in and sync a source before building the daily plan.");
+      return;
+    }
+
+    setIsWorkspaceLoading(true);
+    const result = await loadWorkspaceData({
+      allowDemoFallback: previewMode,
+      date: planningDate,
+    });
+    setWorkspaceSource(result.source);
+    setWorkspaceNotice(result.notice);
+    setWorkspaceEmails(result.emails);
+    setWorkspaceCalendarEvents(result.calendarEvents);
+    setIsWorkspaceLoading(false);
   }
 
   useEffect(() => {
@@ -355,6 +753,10 @@ function App() {
       listener.subscription.unsubscribe();
     };
   }, [authRequired]);
+
+  useEffect(() => {
+    void refreshWorkspaceData();
+  }, [authSession, planningDate, previewMode]);
 
   useEffect(() => {
     let isMounted = true;
@@ -403,6 +805,11 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (openHandoffTasks.some((task) => task.id === handoffTaskId)) return;
+    setHandoffTaskId(openHandoffTasks[0]?.id ?? "");
+  }, [handoffTaskId, openHandoffTasks]);
+
   function applySettings(nextSettings: CustomizationSettings) {
     const next = sanitizeCustomizationSettings(nextSettings);
     const previous = settings;
@@ -450,6 +857,8 @@ function App() {
   }
 
   function toggleTask(taskId: string) {
+    const task = tasks.find((item) => item.id === taskId);
+    const shouldComplete = !completedTasks.has(taskId);
     setCompletedTasks((current) => {
       const next = new Set(current);
       if (next.has(taskId)) {
@@ -459,6 +868,71 @@ function App() {
       }
       return next;
     });
+    if (task && shouldComplete) {
+      recordMomentum("win", task.title, `Closed ${task.effort} minute task from ${task.source}.`);
+    }
+  }
+
+  function createActionTask({
+    title,
+    detail,
+    source,
+    sourceRole,
+    sourceSubject,
+    priority,
+    category,
+    effort,
+    impact,
+    labels,
+    risk,
+  }: {
+    title: string;
+    detail: string;
+    source: string;
+    sourceRole: string;
+    sourceSubject: string;
+    priority: EmailPriority;
+    category: TaskCategory;
+    effort: number;
+    impact: number;
+    labels: string[];
+    risk: string;
+  }): ActionItem {
+    const suffix = `${Date.now()}-${Math.round(Math.random() * 10_000)}`;
+    const dueHour = priority === "urgent" ? 15 : priority === "high" ? 16 : 17;
+    return {
+      id: `task-${suffix}`,
+      sourceEmailId: `generated-${suffix}`,
+      title,
+      detail,
+      source,
+      sourceRole,
+      sourceAvatar:
+        "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=160&q=80",
+      sourceSubject,
+      receivedAt: new Date().toISOString(),
+      dueAt: `${planningDate}T${String(dueHour).padStart(2, "0")}:00:00`,
+      priority,
+      category,
+      status: "open",
+      confidence: 100,
+      effort,
+      impact,
+      risk,
+      labels,
+      rankScore: priorityRank[priority] * 18 + impact * 4 - effort * 0.2,
+    };
+  }
+
+  function recordMomentum(kind: MomentumKind, title: string, detail: string) {
+    const event: MomentumEvent = {
+      id: `${Date.now()}-${kind}-${Math.round(Math.random() * 1_000)}`,
+      kind,
+      title,
+      detail,
+      createdAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+    };
+    setMomentumEvents((current) => [event, ...current].slice(0, 8));
   }
 
   function addManualTask() {
@@ -468,31 +942,21 @@ function App() {
       return;
     }
 
-    const createdAt = new Date().toISOString();
     const effort = Math.max(5, Math.min(180, captureMinutes));
     const impact = capturePriority === "urgent" ? 8 : capturePriority === "high" ? 7 : 5;
-    const manualTask: ActionItem = {
-      id: `task-capture-${Date.now()}`,
-      sourceEmailId: `capture-${Date.now()}`,
+    const manualTask = createActionTask({
       title,
       detail: "Captured manually during planning.",
       source: "Quick capture",
       sourceRole: "Manual",
-      sourceAvatar:
-        "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=160&q=80",
       sourceSubject: "Manual capture",
-      receivedAt: createdAt,
-      dueAt: `${demoDate}T17:00:00-07:00`,
       priority: capturePriority,
       category: "follow-up",
-      status: "open",
-      confidence: 100,
       effort,
       impact,
-      risk: "Captured by the user so it stays visible in today's plan.",
       labels: ["manual", "capture"],
-      rankScore: priorityRank[capturePriority] * 18 + impact * 4 - effort * 0.2,
-    };
+      risk: "Captured by the user so it stays visible in today's plan.",
+    });
 
     setManualTasks((current) => [manualTask, ...current]);
     setCaptureText("");
@@ -514,8 +978,118 @@ function App() {
       return;
     }
     setCompletedTasks((current) => new Set(current).add(activeSprintTask.id));
+    recordMomentum("win", activeSprintTask.title, "Finished from a protected focus sprint.");
     setProductivityNotice(`${activeSprintTask.title} marked done from the focus sprint.`);
     setActiveSprintId("");
+  }
+
+  function runRescuePlaybook(playbook: RescuePlaybook) {
+    const existingTitles = new Set(tasks.map((task) => task.title.toLowerCase()));
+    const createdTasks = playbook.tasks
+      .filter((task) => !existingTitles.has(task.title.toLowerCase()))
+      .map((task) =>
+        createActionTask({
+          title: task.title,
+          detail: task.detail,
+          source: "Autopilot-AI",
+          sourceRole: "Rescue playbook",
+          sourceSubject: playbook.title,
+          priority: task.priority,
+          category: task.category,
+          effort: task.effort,
+          impact: task.impact,
+          labels: task.labels,
+          risk: `${playbook.title} created this task to recover time and reduce cognitive load.`,
+        }),
+      );
+
+    if (createdTasks.length > 0) {
+      setManualTasks((current) => [...createdTasks, ...current]);
+    }
+
+    setPlanMode(playbook.mode);
+    setActivatedPlaybooks((current) => [
+      {
+        id: `playbook-${Date.now()}-${playbook.id}`,
+        playbookId: playbook.id,
+        title: playbook.title,
+        activatedAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        outcome: playbook.outcome,
+        createdTaskIds: createdTasks.map((task) => task.id),
+      },
+      ...current.filter((item) => item.playbookId !== playbook.id),
+    ]);
+    setRescueNotice(
+      createdTasks.length > 0
+        ? `${playbook.title} activated. ${createdTasks.length} tasks added and ${planModeLabels[playbook.mode].toLowerCase()} mode selected.`
+        : `${playbook.title} activated. Existing tasks already cover this rescue path, so nothing duplicated.`,
+    );
+    setProductivityNotice(
+      `${playbook.title} set ${planModeLabels[playbook.mode].toLowerCase()} mode for the next block.`,
+    );
+    recordMomentum("playbook", `${playbook.title} activated`, playbook.outcome);
+  }
+
+  function createTeamHandoff() {
+    const task = openHandoffTasks.find((item) => item.id === handoffTaskId) ?? openHandoffTasks[0];
+    const owner = handoffOwner.trim();
+    if (!task) {
+      setHandoffNotice("No open task is available to hand off right now.");
+      return;
+    }
+    if (!owner) {
+      setHandoffNotice("Add the owner before creating a handoff.");
+      return;
+    }
+
+    const note =
+      handoffNote.trim() ||
+      `Take ownership of ${task.title} and reply with the next checkpoint if timing changes.`;
+    const shareUrl = buildHandoffShareUrl(window.location.href.split("#")[0], {
+      taskTitle: task.title,
+      owner,
+      note,
+      channel: handoffChannel,
+    });
+    const handoff: TeamHandoff = {
+      id: `handoff-${Date.now()}-${task.id}`,
+      taskId: task.id,
+      taskTitle: task.title,
+      owner,
+      note,
+      channel: handoffChannel,
+      sharedAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      shareUrl,
+    };
+
+    setTeamHandoffs((current) => [handoff, ...current.filter((item) => item.taskId !== task.id)]);
+    setDelegatedTaskIds((current) => new Set(current).add(task.id));
+    setCompletedTasks((current) => {
+      const next = new Set(current);
+      next.delete(task.id);
+      return next;
+    });
+    setHandoffOwner("");
+    setHandoffNote("");
+    setHandoffNotice(`${task.title} handed off to ${owner}.`);
+    recordMomentum("handoff", `Handoff sent to ${owner}`, task.title);
+  }
+
+  function reclaimHandoff(handoffId: string) {
+    const handoff = teamHandoffs.find((item) => item.id === handoffId);
+    if (!handoff) return;
+    const hasRemainingHandoff = teamHandoffs.some(
+      (item) => item.id !== handoffId && item.taskId === handoff.taskId,
+    );
+    setTeamHandoffs((current) => current.filter((item) => item.id !== handoffId));
+    if (!hasRemainingHandoff) {
+      setDelegatedTaskIds((current) => {
+        const next = new Set(current);
+        next.delete(handoff.taskId);
+        return next;
+      });
+    }
+    setHandoffNotice(`${handoff.taskTitle} is back in your queue.`);
   }
 
   async function connectProvider(key: IntegrationKey) {
@@ -529,12 +1103,15 @@ function App() {
 
   async function syncGoogleWorkspaceData() {
     if (!isGoogleConnected) {
-      setConnectionNotice("Connect Google once before syncing Gmail and Calendar.");
+      setConnectionNotice("Finish Gmail and Calendar connection on Sources before syncing.");
       return;
     }
+    const { dayStartIso, dayEndIso } = buildLocalDayRange(planningDate);
     setConnectionNotice("Syncing Google Workspace data...");
     const result = await syncGoogleWorkspace({
-      date: demoDate,
+      date: planningDate,
+      dayStartIso,
+      dayEndIso,
       maxEmails: 25,
       maxEvents: 50,
     });
@@ -545,6 +1122,7 @@ function App() {
     );
     if (result.ok) {
       setIsGoogleConnected(true);
+      await refreshWorkspaceData();
     }
   }
 
@@ -573,7 +1151,7 @@ function App() {
   async function runApiPlanner() {
     setProductivityNotice("Running the AI planning API...");
     const result = await runDailyPlanner({
-      date: demoDate,
+      date: planningDate,
       timezone: "America/Los_Angeles",
       planningMode: planMode,
     });
@@ -592,6 +1170,127 @@ function App() {
     }
   }
 
+  function startCalendarDraft(
+    hour = settings.calendar.startHour,
+    seed?: Partial<CalendarDraft>,
+  ) {
+    const safeHour = Math.min(Math.max(hour, settings.calendar.startHour), settings.calendar.endHour - 1);
+    const startTime = seed?.startTime ?? `${String(safeHour).padStart(2, "0")}:00`;
+    const endHour = Math.min(
+      safeHour + Math.max(1, Math.round((seed?.endTime ? 0 : 1))),
+      settings.calendar.endHour,
+    );
+    const endTime = seed?.endTime ?? `${String(endHour).padStart(2, "0")}:00`;
+    setCalendarDraft({
+      id: seed?.id,
+      title: seed?.title ?? "",
+      date: seed?.date ?? planningDate,
+      startTime,
+      endTime,
+      type: seed?.type ?? "meeting",
+    });
+  }
+
+  function openCalendarSlot(hour: number) {
+    startCalendarDraft(hour);
+    setCalendarNotice(`Drafting a new calendar block at ${formatHourLabel(hour)}.`);
+  }
+
+  function selectCalendarEvent(event: CalendarEvent) {
+    if (!event.editable) {
+      setCalendarDraft(null);
+      setCalendarNotice(
+        `${event.title} came from ${event.provider === "microsoft" ? "Microsoft" : "Google"} and stays read-only until external write approval is enabled.`,
+      );
+      return;
+    }
+
+    setCalendarDraft({
+      id: event.id,
+      title: event.title,
+      date: localDateFromIso(event.start),
+      startTime: formatTimeInputValue(event.start),
+      endTime: formatTimeInputValue(event.end),
+      type: event.type,
+    });
+    setCalendarNotice(`Editing ${event.title}.`);
+  }
+
+  function updateCalendarDraft(next: Partial<CalendarDraft>) {
+    setCalendarDraft((current) => (current ? { ...current, ...next } : current));
+  }
+
+  function cancelCalendarDraft() {
+    setCalendarDraft(null);
+    setCalendarNotice("Tap the grid to add a block you control, or open one of your own items to move it.");
+  }
+
+  function saveCalendarDraftItem() {
+    if (!calendarDraft) return;
+
+    const title = calendarDraft.title.trim();
+    if (!title) {
+      setCalendarNotice("Add a title before saving the calendar item.");
+      return;
+    }
+
+    const start = buildCalendarIso(calendarDraft.date, calendarDraft.startTime);
+    const end = buildCalendarIso(calendarDraft.date, calendarDraft.endTime);
+    if (new Date(end).getTime() <= new Date(start).getTime()) {
+      setCalendarNotice("End time must be later than the start time.");
+      return;
+    }
+
+    const savedEvent: CalendarEvent = {
+      id: calendarDraft.id ?? `manual-${Date.now()}-${Math.round(Math.random() * 10_000)}`,
+      title,
+      start,
+      end,
+      type: calendarDraft.type,
+      provider: "manual",
+      editable: true,
+      attendees: [],
+    };
+
+    setManualCalendarEvents((current) => {
+      const others = current.filter((event) => event.id !== savedEvent.id);
+      return [...others, savedEvent].sort(
+        (left, right) => new Date(left.start).getTime() - new Date(right.start).getTime(),
+      );
+    });
+    setCalendarDraft(null);
+    setCalendarNotice(`${title} saved to your editable calendar blocks.`);
+    recordMomentum("win", title, "Added or updated from the calendar workspace.");
+  }
+
+  function applyWorkflowTemplate(template: WorkflowTemplate) {
+    const task = createActionTask({
+      title: template.title,
+      detail: template.detail,
+      source: "Workflow template",
+      sourceRole: "Template gallery",
+      sourceSubject: template.title,
+      priority: template.priority,
+      category: template.category,
+      effort: template.defaultMinutes,
+      impact: template.priority === "urgent" ? 9 : 7,
+      labels: template.labels,
+      risk: "Template-generated task. Review and adjust before sending or changing anything external.",
+    });
+    setManualTasks((current) => [task, ...current]);
+    setPlanMode(template.mode);
+    startCalendarDraft(settings.calendar.startHour + 1, {
+      title: template.title,
+      type: template.blockType,
+      endTime: addMinutesToTime(`${String(settings.calendar.startHour + 1).padStart(2, "0")}:00`, template.defaultMinutes),
+    });
+    setProductivityNotice(`${template.title} added to the plan and staged as a calendar block.`);
+    setCalendarNotice(`Confirm the ${template.title.toLowerCase()} block if you want to reserve time for it.`);
+    recordMomentum("playbook", `${template.title} template applied`, template.detail);
+  }
+
+  const dailyHeadline = buildDailyHeadline(orderedTasks);
+
   function renderProductivityPanel() {
     return (
       <ProductivityPanel
@@ -604,7 +1303,9 @@ function App() {
         notice={productivityNotice}
         planMode={planMode}
         quickWins={quickWins}
+        workflowTemplates={workflowTemplates}
         onAddManualTask={addManualTask}
+        onApplyTemplate={applyWorkflowTemplate}
         onCaptureMinutesChange={setCaptureMinutes}
         onCapturePriorityChange={setCapturePriority}
         onCaptureTextChange={setCaptureText}
@@ -643,15 +1344,26 @@ function App() {
           </div>
         </div>
         <div className="task-list">
-          {filteredTasks.map((task, index) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              todayISO={demoDate}
-              index={index}
-              onToggle={toggleTask}
-            />
-          ))}
+          {filteredTasks.length > 0 ? (
+            filteredTasks.map((task, index) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                todayISO={planningDate}
+                index={index}
+                onToggle={toggleTask}
+              />
+            ))
+          ) : (
+            <article className="task-empty-state">
+              <strong>
+                {workspaceSource === "empty"
+                  ? "No source-backed action items yet."
+                  : "Nothing is waiting in this filter right now."}
+              </strong>
+              <p>{workspaceNotice}</p>
+            </article>
+          )}
         </div>
       </section>
     );
@@ -662,17 +1374,31 @@ function App() {
       case "daily":
         return (
           <>
-            <Header summary={summary} />
+            <Header planningDate={planningDate} sourceCount={sourceCount} summary={summary} />
             <section className="command-band" aria-label="Daily command summary">
               <div>
                 <span className="eyebrow">Today&apos;s call</span>
-                <h2>Do the customer reply, renewal approval, and launch edit before 4 PM.</h2>
+                <h2>{dailyHeadline}</h2>
               </div>
               <button className="primary-action" type="button" onClick={() => navigate("productivity")}>
                 Start next task
                 <ArrowRight size={18} aria-hidden="true" />
               </button>
             </section>
+            <RescuePlaybooksPanel
+              activePlaybookIds={activatedPlaybookIds}
+              notice={rescueNotice}
+              playbooks={rescuePlaybooks}
+              recommendedPlaybookId={recommendedPlaybookId}
+              onRun={runRescuePlaybook}
+            />
+            <MomentumBoard
+              completedCount={completedCount}
+              handoffCount={teamHandoffs.length}
+              milestones={milestones}
+              playbookCount={activatedPlaybooks.length}
+              events={momentumEvents}
+            />
             {renderTaskSection()}
           </>
         );
@@ -682,7 +1408,7 @@ function App() {
             <PageHeader
               eyebrow="Productivity"
               title="Plan the next block of work"
-              body="Capture loose work, switch planning modes, and protect the next focus sprint without mixing it into the task list."
+              body="Capture loose work, apply reusable workflow templates, switch planning modes, and protect the next focus sprint without mixing it into the task list."
             />
             {renderProductivityPanel()}
             {settings.sections.focusWindows ? (
@@ -712,6 +1438,7 @@ function App() {
               <IntegrationPanel
                 connectionNotice={connectionNotice}
                 googleConnected={isGoogleConnected}
+                isSyncing={isWorkspaceLoading}
                 onConnect={connectProvider}
                 onSyncGoogle={syncGoogleWorkspaceData}
               />
@@ -722,6 +1449,13 @@ function App() {
                 onCustomize={() => navigate("customize")}
               />
             )}
+            <WorkspaceSnapshotPanel
+              calendarEvents={calendarEvents}
+              isLoading={isWorkspaceLoading}
+              notice={workspaceNotice}
+              source={workspaceSource}
+              syncedEmails={workspaceEmails}
+            />
             <SupabaseSetupPanel />
           </>
         );
@@ -731,7 +1465,22 @@ function App() {
             <PageHeader
               eyebrow="Actions"
               title="Turn recommendations into controlled changes"
-              body="Apply, undo, queue, snooze, share, and save AI action presets before connecting live inbox data."
+              body="Apply, undo, queue, snooze, share, save AI action presets, and hand work off cleanly before connecting live inbox data."
+            />
+            <TeamHandoffRoom
+              channel={handoffChannel}
+              handoffs={teamHandoffs}
+              notice={handoffNotice}
+              note={handoffNote}
+              owner={handoffOwner}
+              selectedTaskId={handoffTaskId}
+              tasks={openHandoffTasks}
+              onChannelChange={setHandoffChannel}
+              onCreate={createTeamHandoff}
+              onNoteChange={setHandoffNote}
+              onOwnerChange={setHandoffOwner}
+              onReclaim={reclaimHandoff}
+              onTaskChange={setHandoffTaskId}
             />
             {settings.sections.actionLab ? (
               <ImprovementStudio />
@@ -766,12 +1515,21 @@ function App() {
             <PageHeader
               eyebrow="Calendar"
               title="Work from a larger daily calendar"
-              body="A Google Calendar-style view keeps the time grid, event colors, agenda, and adjustable work hours in one focused page."
+              body="A Google Calendar-style view keeps the time grid, event colors, agenda, and editable user-scheduled blocks in one focused page."
             />
             <FullCalendarSection
-              date={demoDate}
-              events={demoCalendar}
+              date={planningDate}
+              draft={calendarDraft}
+              events={calendarEvents}
+              notice={calendarNotice}
               preferences={settings.calendar}
+              onCancelDraft={cancelCalendarDraft}
+              onDraftChange={updateCalendarDraft}
+              onEditEvent={selectCalendarEvent}
+              onJumpToToday={() => setPlanningDate(getLocalDateISO())}
+              onSaveDraft={saveCalendarDraftItem}
+              onSelectDate={setPlanningDate}
+              onSlotClick={openCalendarSlot}
             />
           </>
         );
@@ -892,10 +1650,10 @@ function LoginPage({
           </div>
         </div>
         <span className="eyebrow">Sign in</span>
-        <h1 id="login-title">Connect the inbox once. Work from the plan every day.</h1>
+        <h1 id="login-title">Sign in first. Then connect the work that matters.</h1>
         <p className="auth-copy">
-          Google sign-in connects Gmail and Calendar with read-only access. Email sign-in keeps your account available
-          when you want to connect Google later.
+          Google sign-in creates your session. The Sources page then upgrades access for Gmail and Calendar sync. Email
+          sign-in keeps your account available when you want to connect Google later.
         </p>
         <button className="google-login-button" type="button" onClick={onGoogleLogin}>
           <span aria-hidden="true">G</span>
@@ -922,8 +1680,19 @@ function LoginPage({
         <p className="auth-note" aria-live="polite">
           {notice}
         </p>
+        <SiteLinks className="auth-links" />
       </section>
     </main>
+  );
+}
+
+function SiteLinks({ className }: { className?: string }) {
+  return (
+    <nav className={className ?? "site-links"} aria-label="Site links">
+      <a href="./home.html">Home</a>
+      <a href="./privacy.html">Privacy policy</a>
+      <a href="./terms.html">Terms &amp; conditions</a>
+    </nav>
   );
 }
 
@@ -985,6 +1754,7 @@ function Sidebar({
       <button className="sidebar-quick-action" type="button" onClick={() => onNavigate("customize")}>
         Quick customization
       </button>
+      <SiteLinks className="sidebar-links" />
       <div className="operator">
         <img
           src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80"
@@ -992,7 +1762,13 @@ function Sidebar({
         />
         <div>
           <strong>{session?.user.email ?? "Mock workspace"}</strong>
-          <span>{googleConnected ? "Google connected" : "Google not connected"}</span>
+          <span>
+            {googleConnected
+              ? "Google workspace connected"
+              : session?.user.app_metadata.provider === "google"
+                ? "Signed in with Google"
+                : "Google not connected"}
+          </span>
         </div>
       </div>
       {onSignOut ? (
@@ -1050,11 +1826,13 @@ function HiddenSectionNotice({
 function IntegrationPanel({
   connectionNotice,
   googleConnected,
+  isSyncing,
   onConnect,
   onSyncGoogle,
 }: {
   connectionNotice: string;
   googleConnected: boolean;
+  isSyncing: boolean;
   onConnect: (key: IntegrationKey) => void;
   onSyncGoogle: () => void;
 }) {
@@ -1076,14 +1854,14 @@ function IntegrationPanel({
           className="primary-action"
           type="button"
           onClick={onSyncGoogle}
-          disabled={!hasSupabaseConfig || !googleConnected}
+          disabled={!hasSupabaseConfig || !googleConnected || isSyncing}
         >
-          Sync Google data
+          {isSyncing ? "Syncing Google data..." : "Sync Google data"}
         </button>
         <span className="inline-help">
           {googleConnected
             ? "Google is saved. Sync stores recent Gmail and today's Calendar events."
-            : "Connect Google once to enable Gmail and Calendar sync."}
+            : "Finish Gmail and Calendar connection to enable sync."}
         </span>
       </div>
       <div className="integration-grid">
@@ -1095,6 +1873,74 @@ function IntegrationPanel({
             onConnect={onConnect}
           />
         ))}
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceSnapshotPanel({
+  calendarEvents,
+  isLoading,
+  notice,
+  source,
+  syncedEmails,
+}: {
+  calendarEvents: CalendarEvent[];
+  isLoading: boolean;
+  notice: string;
+  source: WorkspaceDataSource;
+  syncedEmails: EmailMessage[];
+}) {
+  const statusLabel =
+    source === "live" ? "Live workspace" : source === "demo" ? "Preview workspace" : "Waiting for sync";
+
+  return (
+    <section className="setup-panel workspace-snapshot" aria-labelledby="workspace-snapshot-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Workspace state</span>
+          <h2 id="workspace-snapshot-title">What Autopilot-AI is actually planning from</h2>
+        </div>
+        <div className={source === "live" ? "status-pill ready" : "status-pill"}>
+          <Inbox size={15} aria-hidden="true" />
+          {isLoading ? "Refreshing" : statusLabel}
+        </div>
+      </div>
+      <p className="section-note">{notice}</p>
+      <div className="setup-grid compact">
+        <article>
+          <strong>{syncedEmails.length}</strong>
+          <p>source-backed emails currently in the planning set</p>
+        </article>
+        <article>
+          <strong>{calendarEvents.length}</strong>
+          <p>calendar events visible in the day view</p>
+        </article>
+        <article>
+          <strong>{source === "live" ? "No fake tasks" : "Preview only"}</strong>
+          <p>
+            {source === "live"
+              ? "Action items are derived from synced message metadata and keep a visible source trail."
+              : "The app only shows demo tasks until a real source is connected and synced."}
+          </p>
+        </article>
+      </div>
+      <div className="source-proof-list" aria-label="Recent synced email threads">
+        {syncedEmails.slice(0, 4).map((email) => (
+          <article className="source-proof-card" key={email.id}>
+            <strong>{email.subject}</strong>
+            <span>
+              {email.from} · {formatTime(email.receivedAt)}
+            </span>
+            <p>{email.preview}</p>
+          </article>
+        ))}
+        {syncedEmails.length === 0 ? (
+          <article className="source-proof-card empty">
+            <strong>No synced email threads yet</strong>
+            <p>Once Google data is stored, recent subjects and previews appear here before they become action items.</p>
+          </article>
+        ) : null}
       </div>
     </section>
   );
@@ -1133,7 +1979,7 @@ function SupabaseSetupPanel() {
         </article>
         <article>
           <strong>5. Deploy API functions</strong>
-          <p>Deploy `store-google-connection`, `sync-google-workspace`, and `plan-day`, then set Google, encryption, and OpenAI secrets.</p>
+          <p>Deploy `store-google-connection`, `sync-google-workspace`, `sync-microsoft-workspace`, and `plan-day`, then set Google, Microsoft, encryption, and OpenAI secrets.</p>
         </article>
       </div>
     </section>
@@ -1499,7 +2345,9 @@ function ProductivityPanel({
   notice,
   planMode,
   quickWins,
+  workflowTemplates,
   onAddManualTask,
+  onApplyTemplate,
   onCaptureMinutesChange,
   onCapturePriorityChange,
   onCaptureTextChange,
@@ -1517,7 +2365,9 @@ function ProductivityPanel({
   notice: string;
   planMode: PlanMode;
   quickWins: ActionItem[];
+  workflowTemplates: WorkflowTemplate[];
   onAddManualTask: () => void;
+  onApplyTemplate: (template: WorkflowTemplate) => void;
   onCaptureMinutesChange: (minutes: number) => void;
   onCapturePriorityChange: (priority: EmailPriority) => void;
   onCaptureTextChange: (text: string) => void;
@@ -1640,6 +2490,29 @@ function ProductivityPanel({
           <div className="planning-lists">
             <MiniTaskStack title="Quick wins" tasks={quickWins} />
             <MiniTaskStack title="Deep work" tasks={deepWork} />
+          </div>
+        </article>
+
+        <article className="productivity-card">
+          <span className="productivity-label">Template gallery</span>
+          <div className="template-gallery">
+            {workflowTemplates.map((template) => (
+              <div className="template-card" key={template.id}>
+                <strong>{template.title}</strong>
+                <p>{template.detail}</p>
+                <div className="template-meta">
+                  <span>{planModeLabels[template.mode]}</span>
+                  <span>{template.defaultMinutes}m block</span>
+                </div>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={() => onApplyTemplate(template)}
+                >
+                  Use template
+                </button>
+              </div>
+            ))}
           </div>
         </article>
       </div>
@@ -2081,15 +2954,293 @@ function ImprovementStudio() {
   );
 }
 
+function RescuePlaybooksPanel({
+  activePlaybookIds,
+  notice,
+  playbooks,
+  recommendedPlaybookId,
+  onRun,
+}: {
+  activePlaybookIds: Set<string>;
+  notice: string;
+  playbooks: RescuePlaybook[];
+  recommendedPlaybookId: string;
+  onRun: (playbook: RescuePlaybook) => void;
+}) {
+  return (
+    <section className="rescue-panel" aria-labelledby="rescue-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Time rescue</span>
+          <h2 id="rescue-title">Time rescue playbooks</h2>
+        </div>
+        <div className="status-pill ready" aria-live="polite">
+          <Clock3 size={15} aria-hidden="true" />
+          {notice}
+        </div>
+      </div>
+      <div className="playbook-grid">
+        {playbooks.map((playbook) => {
+          const isRecommended = playbook.id === recommendedPlaybookId;
+          const isActive = activePlaybookIds.has(playbook.id);
+
+          return (
+            <article
+              className={isRecommended ? "playbook-card recommended" : "playbook-card"}
+              key={playbook.id}
+            >
+              <div className="playbook-topline">
+                <span>{playbook.duration}m</span>
+                <span>{planModeLabels[playbook.mode]}</span>
+                {isRecommended ? <span>Recommended</span> : null}
+              </div>
+              <h3>{playbook.title}</h3>
+              <p>{playbook.summary}</p>
+              <p className="playbook-trigger">{playbook.trigger}</p>
+              <div className="playbook-task-list">
+                {playbook.tasks.map((task) => (
+                  <span key={task.title}>{task.title}</span>
+                ))}
+              </div>
+              {isActive ? <div className="enabled-pill">Used today</div> : null}
+              <button className="primary-action" type="button" onClick={() => onRun(playbook)}>
+                Run {playbook.title}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function MomentumBoard({
+  completedCount,
+  handoffCount,
+  milestones,
+  playbookCount,
+  events,
+}: {
+  completedCount: number;
+  handoffCount: number;
+  milestones: MilestoneProgress[];
+  playbookCount: number;
+  events: MomentumEvent[];
+}) {
+  return (
+    <section className="momentum-panel" aria-labelledby="momentum-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Momentum</span>
+          <h2 id="momentum-title">Momentum and milestones</h2>
+        </div>
+        <div className="status-pill ready">
+          <CheckCircle2 size={15} aria-hidden="true" />
+          {events.length === 0 ? "No wins logged yet" : `${events.length} useful moves logged`}
+        </div>
+      </div>
+      <div className="momentum-layout">
+        <div className="momentum-column">
+          <div className="momentum-stats">
+            <article className="momentum-stat-card">
+              <span>Closed</span>
+              <strong>{completedCount}</strong>
+            </article>
+            <article className="momentum-stat-card">
+              <span>Playbooks</span>
+              <strong>{playbookCount}</strong>
+            </article>
+            <article className="momentum-stat-card">
+              <span>Handoffs</span>
+              <strong>{handoffCount}</strong>
+            </article>
+            <article className="momentum-stat-card">
+              <span>Unlocked</span>
+              <strong>{milestones.filter((milestone) => milestone.complete).length}</strong>
+            </article>
+          </div>
+          <div className="milestone-list">
+            {milestones.map((milestone) => {
+              const progress = Math.min(100, Math.round((milestone.current / milestone.target) * 100));
+              return (
+                <article className="milestone-card" key={milestone.id}>
+                  <div className="milestone-copy">
+                    <strong>{milestone.title}</strong>
+                    <span>{milestone.detail}</span>
+                  </div>
+                  <div className="milestone-meta">
+                    <span>
+                      {Math.min(milestone.current, milestone.target)}/{milestone.target}
+                    </span>
+                    <div className="milestone-meter" aria-hidden="true">
+                      <span style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+        <div className="momentum-feed">
+          <h3>Recent wins</h3>
+          {events.length === 0 ? <p>No wins recorded yet. Run a playbook or finish a task.</p> : null}
+          {events.map((event) => (
+            <article className={`momentum-event ${event.kind}`} key={event.id}>
+              <div>
+                <strong>{event.title}</strong>
+                <p>{event.detail}</p>
+              </div>
+              <span>{event.createdAt}</span>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TeamHandoffRoom({
+  channel,
+  handoffs,
+  notice,
+  note,
+  owner,
+  selectedTaskId,
+  tasks,
+  onChannelChange,
+  onCreate,
+  onNoteChange,
+  onOwnerChange,
+  onReclaim,
+  onTaskChange,
+}: {
+  channel: HandoffChannel;
+  handoffs: TeamHandoff[];
+  notice: string;
+  note: string;
+  owner: string;
+  selectedTaskId: string;
+  tasks: ActionItem[];
+  onChannelChange: (channel: HandoffChannel) => void;
+  onCreate: () => void;
+  onNoteChange: (note: string) => void;
+  onOwnerChange: (owner: string) => void;
+  onReclaim: (handoffId: string) => void;
+  onTaskChange: (taskId: string) => void;
+}) {
+  return (
+    <section className="handoff-panel" aria-labelledby="handoff-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Delegation</span>
+          <h2 id="handoff-title">Team handoff room</h2>
+        </div>
+        <div className="status-pill ready" aria-live="polite">
+          <MailOpen size={15} aria-hidden="true" />
+          {notice}
+        </div>
+      </div>
+      <div className="handoff-layout">
+        <form
+          className="handoff-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onCreate();
+          }}
+        >
+          <label className="field-label">
+            Task
+            <select
+              aria-label="Handoff task"
+              value={selectedTaskId}
+              onChange={(event) => onTaskChange(event.target.value)}
+              disabled={tasks.length === 0}
+            >
+              {tasks.length === 0 ? <option value="">No open tasks</option> : null}
+              {tasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field-label">
+            Owner
+            <input
+              aria-label="Handoff owner"
+              placeholder="Who should own this next?"
+              value={owner}
+              onChange={(event) => onOwnerChange(event.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            Channel
+            <select
+              aria-label="Handoff channel"
+              value={channel}
+              onChange={(event) => onChannelChange(event.target.value as HandoffChannel)}
+            >
+              <option value="email">Email</option>
+              <option value="slack">Slack</option>
+              <option value="link">Link</option>
+            </select>
+          </label>
+          <label className="field-label">
+            Note
+            <textarea
+              aria-label="Handoff note"
+              placeholder="Context, deadline, and what good looks like."
+              value={note}
+              onChange={(event) => onNoteChange(event.target.value)}
+            />
+          </label>
+          <button className="primary-action" type="submit" disabled={tasks.length === 0}>
+            Create handoff
+          </button>
+        </form>
+
+        <div className="handoff-list">
+          <h3>Active handoffs</h3>
+          {handoffs.length === 0 ? <p>No handoffs created yet.</p> : null}
+          {handoffs.map((handoff) => (
+            <article className="handoff-card" key={handoff.id}>
+              <div className="handoff-copy">
+                <strong>{handoff.taskTitle}</strong>
+                <span>
+                  {handoff.owner} via {handoff.channel} at {handoff.sharedAt}
+                </span>
+                <p>{handoff.note}</p>
+              </div>
+              <input
+                aria-label="Handoff share link"
+                className="share-output"
+                readOnly
+                value={handoff.shareUrl}
+              />
+              <button className="secondary-action" type="button" onClick={() => onReclaim(handoff.id)}>
+                Reclaim task
+              </button>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Header({
+  planningDate,
+  sourceCount,
   summary,
 }: {
+  planningDate: string;
+  sourceCount: number;
   summary: ReturnType<typeof summarizePlan>;
 }) {
   return (
     <header className="top-header">
       <div>
-        <span className="eyebrow">Thursday, April 16</span>
+        <span className="eyebrow">{formatCalendarHeader(planningDate)}</span>
         <h1 id="page-title">
           {summary.openCount} things need action, {summary.urgentCount} are urgent.
         </h1>
@@ -2101,7 +3252,7 @@ function Header({
       <div className="metric-strip" aria-label="Daily metrics">
         <Metric label="Focus time" value={`${summary.focusMinutes}m`} />
         <Metric label="Waiting" value={String(summary.waitingCount)} />
-        <Metric label="Sources" value="5" />
+        <Metric label="Sources" value={String(sourceCount)} />
       </div>
     </header>
   );
@@ -2127,15 +3278,12 @@ function IntegrationCard({
 }) {
   const readiness = getConnectionReadiness(provider, hasSupabaseConfig);
   const isConnected = provider.key === "google" && googleConnected;
-  const canConnect = readiness === "ready" && !isConnected;
   const actionLabel =
     isConnected
       ? "Connected"
       : readiness === "ready"
       ? `Connect ${provider.shortName}`
-      : readiness === "needs-supabase"
-        ? "Add Supabase env"
-        : "Backend needed";
+      : "Open setup";
 
   return (
     <article className={`integration-card ${provider.accent}`}>
@@ -2150,10 +3298,15 @@ function IntegrationCard({
           <span key={item}>{item}</span>
         ))}
       </div>
+      <p className="integration-detail">
+        {readiness === "needs-server"
+          ? `Backend route required. First setup step: ${provider.requiredSetup[0]}`
+          : `Scopes visible before connect: ${provider.scopes.join(", ")}`}
+      </p>
       <button
         type="button"
         className="secondary-action"
-        disabled={!canConnect}
+        disabled={isConnected}
         onClick={() => onConnect(provider.key)}
       >
         {actionLabel}
@@ -2184,6 +3337,9 @@ function TaskCard({
           <div>
             <span className={`priority ${task.priority}`}>{task.priority}</span>
             <h3>{task.title}</h3>
+            <span className={isWaiting ? "task-state waiting" : isDone ? "task-state done" : "task-state open"}>
+              {isWaiting ? "Waiting" : isDone ? "Done" : "Open"}
+            </span>
           </div>
           <button
             type="button"
@@ -2228,12 +3384,30 @@ function TaskCard({
 
 function FullCalendarSection({
   date,
+  draft,
   events,
+  notice,
   preferences,
+  onCancelDraft,
+  onDraftChange,
+  onEditEvent,
+  onJumpToToday,
+  onSaveDraft,
+  onSelectDate,
+  onSlotClick,
 }: {
   date: string;
+  draft: CalendarDraft | null;
   events: CalendarEvent[];
+  notice: string;
   preferences: CalendarPreferences;
+  onCancelDraft: () => void;
+  onDraftChange: (draft: Partial<CalendarDraft>) => void;
+  onEditEvent: (event: CalendarEvent) => void;
+  onJumpToToday: () => void;
+  onSaveDraft: () => void;
+  onSelectDate: (date: string) => void;
+  onSlotClick: (hour: number) => void;
 }) {
   const weekDays = buildWeekDays(date);
   const hourHeight = eventSizeHourHeight[preferences.eventSize];
@@ -2256,7 +3430,13 @@ function FullCalendarSection({
       <div className="full-calendar-layout">
         <div className="full-calendar-main">
           <div className="calendar-toolbar">
-            <button type="button">Today</button>
+            <button
+              type="button"
+              onClick={onJumpToToday}
+              disabled={date === getLocalDateISO()}
+            >
+              Today
+            </button>
             <span>
               {preferences.startHour}:00 - {preferences.endHour}:00
             </span>
@@ -2264,10 +3444,16 @@ function FullCalendarSection({
 
           <div className="calendar-week-strip large" aria-label="Week overview">
             {weekDays.map((day) => (
-              <div className={day.isToday ? "calendar-day active" : "calendar-day"} key={day.key}>
+              <button
+                aria-label={`Open ${formatCalendarHeader(day.dateIso)}`}
+                className={day.isSelected ? "calendar-day active" : "calendar-day"}
+                key={day.key}
+                onClick={() => onSelectDate(day.dateIso)}
+                type="button"
+              >
                 <span>{day.weekday}</span>
                 <strong>{day.day}</strong>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -2283,14 +3469,26 @@ function FullCalendarSection({
                 style={{ height: `${hourHeight}px` }}
               >
                 <span>{formatHourLabel(hour)}</span>
-                <div />
+                <button
+                  aria-label={`Add event at ${formatHourLabel(hour)}`}
+                  className="calendar-slot-button"
+                  type="button"
+                  onClick={() => onSlotClick(hour)}
+                >
+                  <span>Add</span>
+                </button>
               </div>
             ))}
             <div className="calendar-events-layer">
               {events.map((event) => (
-                <article
+                <button
+                  aria-label={
+                    event.editable ? `Edit ${event.title}` : `View ${event.title}`
+                  }
                   className={`calendar-event-block ${event.type}`}
                   key={event.id}
+                  type="button"
+                  onClick={() => onEditEvent(event)}
                   style={{
                     top: `${getCalendarEventTop(event, preferences.startHour, hourHeight)}px`,
                     height: `${getCalendarEventHeight(
@@ -2305,27 +3503,128 @@ function FullCalendarSection({
                   <span>
                     {formatTime(event.start)} - {formatTime(event.end)}
                   </span>
-                </article>
+                  <small>{event.editable ? "Editable" : "Read only"}</small>
+                </button>
               ))}
             </div>
           </div>
         </div>
 
-        {preferences.showAgenda ? (
-          <aside className="full-calendar-agenda" aria-label="Calendar agenda">
-            <h3>Agenda</h3>
-            {events.map((event) => (
-              <article className={`event-row ${event.type}`} key={event.id}>
-                <span>
-                  {formatTime(event.start)} - {formatTime(event.end)}
-                </span>
-                <strong>{event.title}</strong>
-                {event.attendees ? <small>{event.attendees.join(", ")}</small> : null}
-              </article>
-            ))}
-          </aside>
-        ) : null}
+        <aside className="full-calendar-side">
+          {preferences.showAgenda ? (
+            <section className="full-calendar-agenda" aria-label="Calendar agenda">
+              <h3>Agenda</h3>
+              {events.map((event) => (
+                <article className={`event-row ${event.type}`} key={event.id}>
+                  <span>
+                    {formatTime(event.start)} - {formatTime(event.end)}
+                  </span>
+                  <strong>{event.title}</strong>
+                  {event.attendees ? <small>{event.attendees.join(", ")}</small> : null}
+                  <button
+                    className="agenda-action"
+                    type="button"
+                    onClick={() => onEditEvent(event)}
+                  >
+                    {event.editable ? "Edit" : "Inspect"}
+                  </button>
+                </article>
+              ))}
+              {events.length === 0 ? <p className="agenda-empty">No calendar items on this day yet.</p> : null}
+            </section>
+          ) : null}
+          <CalendarDraftEditor
+            draft={draft}
+            notice={notice}
+            onCancel={onCancelDraft}
+            onChange={onDraftChange}
+            onSave={onSaveDraft}
+          />
+        </aside>
       </div>
+    </section>
+  );
+}
+
+function CalendarDraftEditor({
+  draft,
+  notice,
+  onCancel,
+  onChange,
+  onSave,
+}: {
+  draft: CalendarDraft | null;
+  notice: string;
+  onCancel: () => void;
+  onChange: (draft: Partial<CalendarDraft>) => void;
+  onSave: () => void;
+}) {
+  return (
+    <section className="calendar-editor-panel" aria-labelledby="calendar-editor-title">
+      <div className="rail-heading">
+        <CalendarDays size={18} aria-hidden="true" />
+        <h2 id="calendar-editor-title">{draft?.id ? "Edit your calendar item" : "Add a calendar item"}</h2>
+      </div>
+      <p className="section-note">{notice}</p>
+      {draft ? (
+        <div className="calendar-editor-form">
+          <label className="field-label">
+            Event title
+            <input
+              aria-label="Calendar event title"
+              value={draft.title}
+              onChange={(event) => onChange({ title: event.target.value })}
+              placeholder="Protected focus block"
+            />
+          </label>
+          <div className="capture-row">
+            <label className="field-label">
+              Start time
+              <input
+                aria-label="Calendar event start time"
+                type="time"
+                value={draft.startTime}
+                onChange={(event) => onChange({ startTime: event.target.value })}
+              />
+            </label>
+            <label className="field-label">
+              End time
+              <input
+                aria-label="Calendar event end time"
+                type="time"
+                value={draft.endTime}
+                onChange={(event) => onChange({ endTime: event.target.value })}
+              />
+            </label>
+          </div>
+          <label className="field-label">
+            Event type
+            <select
+              aria-label="Calendar event type"
+              value={draft.type}
+              onChange={(event) => onChange({ type: event.target.value as CalendarEventType })}
+            >
+              <option value="meeting">Meeting</option>
+              <option value="focus">Focus</option>
+              <option value="deadline">Deadline</option>
+              <option value="personal">Personal</option>
+            </select>
+          </label>
+          <div className="button-row">
+            <button className="primary-action" type="button" onClick={onSave}>
+              Save calendar item
+            </button>
+            <button className="secondary-action" type="button" onClick={onCancel}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="calendar-editor-empty">
+          <strong>Nothing selected yet</strong>
+          <p>Tap a time row to add a user-controlled block, or open one of your own calendar items to change it.</p>
+        </div>
+      )}
     </section>
   );
 }
@@ -2512,6 +3811,73 @@ function TutorialModal({
   );
 }
 
+function buildMilestones({
+  playbookCount,
+  completedCount,
+  handoffCount,
+}: {
+  playbookCount: number;
+  completedCount: number;
+  handoffCount: number;
+}): MilestoneProgress[] {
+  return milestoneBlueprints.map((milestone) => {
+    const current =
+      milestone.id === "first-relief"
+        ? playbookCount
+        : milestone.id === "real-progress"
+          ? completedCount
+          : handoffCount;
+    return {
+      ...milestone,
+      current,
+      complete: current >= milestone.target,
+    };
+  });
+}
+
+function selectRecommendedPlaybook(
+  summary: ReturnType<typeof summarizePlan>,
+  conflictCount: number,
+  orderedTasks: ActionItem[],
+): string {
+  const waitingCount = orderedTasks.filter((task) => task.status === "waiting").length;
+  const longestOpenTask = orderedTasks
+    .filter((task) => task.status === "open")
+    .sort((a, b) => b.effort - a.effort)[0];
+
+  if (summary.urgentCount >= 2) return "inbox-reset";
+  if (conflictCount >= 1) return "meeting-defense";
+  if (waitingCount >= 2) return "delegation-sweep";
+  if (summary.focusMinutes < 90 || (longestOpenTask && longestOpenTask.effort >= 25)) {
+    return "deep-work-recovery";
+  }
+  return "inbox-reset";
+}
+
+function buildHandoffShareUrl(
+  baseUrl: string,
+  payload: { taskTitle: string; owner: string; note: string; channel: HandoffChannel },
+): string {
+  const safeBase = baseUrl || window.location.origin;
+  return `${safeBase}#handoff=${encodeURIComponent(JSON.stringify(payload))}`;
+}
+
+function buildDailyHeadline(tasks: ActionItem[]): string {
+  const openTasks = tasks.filter((task) => task.status === "open").slice(0, 3);
+  if (openTasks.length === 0) {
+    return "Connect a source or add a manual task so Autopilot-AI can build today's real plan.";
+  }
+
+  const titles = openTasks.map((task) => task.title.replace(/: /, " "));
+  if (titles.length === 1) {
+    return `Start with ${titles[0].toLowerCase()}.`;
+  }
+  if (titles.length === 2) {
+    return `Do ${titles[0].toLowerCase()} and ${titles[1].toLowerCase()} first.`;
+  }
+  return `Do ${titles[0].toLowerCase()}, ${titles[1].toLowerCase()}, and ${titles[2].toLowerCase()} first.`;
+}
+
 function prioritizeTasksForMode(tasks: ActionItem[], mode: PlanMode): ActionItem[] {
   const ordered = [...tasks];
   if (mode === "impact") return ordered;
@@ -2549,11 +3915,13 @@ function buildWeekDays(dateISO: string) {
   return Array.from({ length: 7 }).map((_, index) => {
     const day = new Date(start);
     day.setDate(start.getDate() + index);
+    const dayDateIso = formatDateIso(day);
     return {
       key: day.toISOString(),
+      dateIso: dayDateIso,
       weekday: new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(day),
       day: new Intl.DateTimeFormat("en-US", { day: "numeric" }).format(day),
-      isToday: day.toDateString() === current.toDateString(),
+      isSelected: dayDateIso === dateISO,
     };
   });
 }
@@ -2570,6 +3938,14 @@ function formatHourLabel(hour: number): string {
   return new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
   }).format(new Date(2026, 0, 1, hour));
+}
+
+function formatDateIso(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 function buildCalendarHours(startHour: number, endHour: number): number[] {
@@ -2602,6 +3978,24 @@ function getCalendarEventHeight(
   const naturalHeight = Math.max(30, (durationMinutes / 60) * hourHeight);
   const availableHeight = Math.max(22, gridHeight - top - 4);
   return Math.min(naturalHeight, availableHeight);
+}
+
+function formatTimeInputValue(isoDate: string): string {
+  const date = new Date(isoDate);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function buildCalendarIso(date: string, time: string): string {
+  return new Date(`${date}T${time}:00`).toISOString();
+}
+
+function addMinutesToTime(time: string, minutes: number): string {
+  const [hoursPart, minutesPart] = time.split(":").map(Number);
+  const totalMinutes = hoursPart * 60 + minutesPart + minutes;
+  const normalized = Math.min(23 * 60 + 59, Math.max(0, totalMinutes));
+  const hours = Math.floor(normalized / 60);
+  const remainder = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
 export default App;

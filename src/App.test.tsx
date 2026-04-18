@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { CUSTOMIZATION_STORAGE_KEY, TUTORIAL_STORAGE_KEY } from "./preferences";
 
 describe("App", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     window.localStorage.clear();
     window.history.replaceState(null, "", "/");
   });
@@ -88,18 +89,97 @@ describe("App", () => {
     expect(await screen.findByText(/AI planning API failed:/)).toBeInTheDocument();
   });
 
-  it("renders a calendar-style day grid with events", () => {
+  it("turns idea-improver themes into usable rescue playbooks and momentum", () => {
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "Time rescue playbooks" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Run Inbox reset" }));
+    expect(screen.getAllByText(/Inbox reset activated/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Used today")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Momentum and milestones" })).toBeInTheDocument();
+    expect(screen.getByText("First relief")).toBeInTheDocument();
+  });
+
+  it("creates handoffs that move work into waiting with a reusable share link", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    const taskSelect = screen.getByLabelText("Handoff task") as HTMLSelectElement;
+    const selectedTaskTitle = taskSelect.options[taskSelect.selectedIndex]?.text ?? "";
+    fireEvent.change(screen.getByLabelText("Handoff owner"), {
+      target: { value: "Maya" },
+    });
+    fireEvent.change(screen.getByLabelText("Handoff note"), {
+      target: { value: "Please take this and send me the checkpoint by 4 PM." },
+    });
+    fireEvent.click(screen.getByText("Create handoff"));
+
+    expect(screen.getByText(new RegExp(`handed off to Maya`, "i"))).toBeInTheDocument();
+    expect((screen.getByLabelText("Handoff share link") as HTMLInputElement).value).toContain(
+      "#handoff=",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Daily plan" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Waiting/ }));
+    expect(screen.getAllByText(selectedTaskTitle).length).toBeGreaterThan(0);
+  });
+
+  it("renders a calendar-style day grid with events and usable date navigation", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-17T09:00:00"));
+
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
     expect(screen.getByLabelText("Daily calendar")).toBeInTheDocument();
     expect(screen.getAllByText("Thursday, April 16").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Team standup").length).toBeGreaterThan(0);
-    expect(screen.getByText("Today")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Wednesday, April 15" }));
+    expect(screen.getAllByText("Wednesday, April 15").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    expect(screen.getAllByText("Friday, April 17").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Calendar" })).toHaveAttribute(
       "aria-current",
       "page",
     );
+  });
+
+  it("creates and edits user-scheduled calendar items from the day grid", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add event at 10 AM" }));
+    fireEvent.change(screen.getByLabelText("Calendar event title"), {
+      target: { value: "Deep work block" },
+    });
+    fireEvent.change(screen.getByLabelText("Calendar event end time"), {
+      target: { value: "11:00" },
+    });
+    fireEvent.click(screen.getByText("Save calendar item"));
+
+    expect(screen.getAllByText("Deep work block").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("10:00 AM - 11:00 AM").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Deep work block" }));
+    fireEvent.change(screen.getByLabelText("Calendar event end time"), {
+      target: { value: "11:30" },
+    });
+    fireEvent.click(screen.getByText("Save calendar item"));
+
+    expect(screen.getAllByText("10:00 AM - 11:30 AM").length).toBeGreaterThan(0);
+  });
+
+  it("applies workflow templates as usable productivity shortcuts", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+    const gallery = screen.getByText("Executive brief follow-up").closest(".template-card");
+    expect(gallery).not.toBeNull();
+    fireEvent.click(within(gallery as HTMLElement).getByRole("button", { name: "Use template" }));
+
+    expect(screen.getByText(/added to the plan and staged as a calendar block/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Daily plan" }));
+    expect(screen.getAllByText("Executive brief follow-up").length).toBeGreaterThan(0);
   });
 
   it("customizes theme, density, visible sections, calendar hours, and sidebar layout", () => {
@@ -208,5 +288,40 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "$200 plan" }));
     expect(screen.getByRole("heading", { name: "Premium capabilities to justify the price" })).toBeInTheDocument();
     expect(screen.getByText("Operator ROI dashboard")).toBeInTheDocument();
+  });
+
+  it("exposes home, privacy, and terms links for verification pages", () => {
+    render(<App />);
+
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "./home.html");
+    expect(screen.getByRole("link", { name: "Privacy policy" })).toHaveAttribute(
+      "href",
+      "./privacy.html",
+    );
+    expect(screen.getByRole("link", { name: "Terms & conditions" })).toHaveAttribute(
+      "href",
+      "./terms.html",
+    );
+  });
+
+  it("keeps source setup buttons actionable instead of leaving dead provider cards", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+
+    const googleCard = screen
+      .getByRole("heading", { name: "Google Workspace" })
+      .closest(".integration-card");
+    expect(googleCard).not.toBeNull();
+    expect(within(googleCard as HTMLElement).getByRole("button")).not.toBeDisabled();
+
+    const microsoftCard = screen
+      .getByRole("heading", { name: "Microsoft 365" })
+      .closest(".integration-card");
+    expect(microsoftCard).not.toBeNull();
+    fireEvent.click(within(microsoftCard as HTMLElement).getByRole("button", { name: "Open setup" }));
+    expect(
+      await screen.findByText(/Microsoft needs backend setup before it can connect safely\./i),
+    ).toBeInTheDocument();
   });
 });

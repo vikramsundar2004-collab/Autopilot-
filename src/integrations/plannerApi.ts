@@ -19,6 +19,13 @@ export interface PlannerApiResult {
 export async function runDailyPlanner(
   request: PlannerApiRequest = {},
 ): Promise<PlannerApiResult> {
+  if (import.meta.env.MODE === "test") {
+    return {
+      ok: false,
+      message: "Planner API is disabled in test mode.",
+    };
+  }
+
   if (!supabase) {
     return {
       ok: false,

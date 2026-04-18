@@ -4,6 +4,9 @@ import type { IntegrationKey } from "./providers";
 import { getProviderByKey } from "./providers";
 import { getAppUrl, hasSupabaseConfig, supabase } from "./supabaseClient";
 
+const pendingOAuthIntentStorageKey = "autopilot-ai:pending-oauth-intent";
+type OAuthIntent = IntegrationKey | "google-login" | "google-workspace";
+
 export interface ConnectionResult {
   ok: boolean;
   message: string;
@@ -18,7 +21,7 @@ export async function startIntegrationConnection(
   if (provider.serverRequired || !provider.supabaseProvider) {
     return {
       ok: false,
-      message: `${provider.shortName} needs a backend token exchange before it can be connected safely.`,
+      message: `${provider.shortName} needs backend setup before it can connect safely. First step: ${provider.requiredSetup[0]}`,
     };
   }
 
@@ -30,30 +33,27 @@ export async function startIntegrationConnection(
     };
   }
 
-  const queryParams =
-    provider.key === "google"
-      ? {
-          access_type: "offline",
-          prompt: "consent",
-        }
-      : undefined;
-
   const { data: sessionData } = await supabase.auth.getSession();
+  const oauthOptions =
+    provider.key === "google"
+      ? buildGoogleWorkspaceOAuthOptions(provider)
+      : {
+          redirectTo: getOAuthRedirectUrl(),
+          scopes: provider.scopes.join(" "),
+        };
   const oauthCredentials = {
     provider: provider.supabaseProvider,
-    options: {
-      redirectTo: getOAuthRedirectUrl(),
-      scopes: provider.scopes.join(" "),
-      queryParams,
-    },
+    options: oauthOptions,
   };
 
+  rememberPendingOAuthIntent(provider.key === "google" ? "google-workspace" : key);
   const { error } =
     sessionData.session && provider.key === "google"
       ? await supabase.auth.linkIdentity(oauthCredentials)
       : await supabase.auth.signInWithOAuth(oauthCredentials);
 
   if (error) {
+    clearPendingOAuthIntent();
     return { ok: false, message: error.message };
   }
 
@@ -64,7 +64,30 @@ export async function startIntegrationConnection(
 }
 
 export async function startGoogleLogin(): Promise<ConnectionResult> {
-  return startIntegrationConnection("google");
+  if (!hasSupabaseConfig || !supabase) {
+    return {
+      ok: false,
+      message:
+        "Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env, then restart the dev server.",
+    };
+  }
+
+  rememberPendingOAuthIntent("google-login");
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: getOAuthRedirectUrl(),
+    },
+  });
+  if (error) {
+    clearPendingOAuthIntent();
+    return { ok: false, message: error.message };
+  }
+
+  return {
+    ok: true,
+    message: "Opening Google sign-in.",
+  };
 }
 
 export async function startEmailLogin(email: string): Promise<ConnectionResult> {
@@ -81,6 +104,7 @@ export async function startEmailLogin(email: string): Promise<ConnectionResult> 
     return { ok: false, message: "Enter a valid email address." };
   }
 
+  clearPendingOAuthIntent();
   const { error } = await supabase.auth.signInWithOtp({
     email: normalizedEmail,
     options: {
@@ -96,6 +120,7 @@ export async function startEmailLogin(email: string): Promise<ConnectionResult> 
 
 export async function signOut(): Promise<ConnectionResult> {
   if (!supabase) return { ok: false, message: "Supabase is not configured." };
+  clearPendingOAuthIntent();
   const { error } = await supabase.auth.signOut();
   if (error) return { ok: false, message: error.message };
   return { ok: true, message: "Signed out." };
@@ -111,6 +136,7 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
   if (!callbackPath.includes("auth/callback")) {
     return null;
   }
+  const pendingIntent = consumePendingOAuthIntent();
 
   const code = url.searchParams.get("code");
   if (!code) {
@@ -129,7 +155,7 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
     window.history.replaceState({}, document.title, "/");
   }
   const provider = data.session?.user.app_metadata.provider ?? "provider";
-  const tokenResult = await storeGoogleConnection(data.session);
+  const tokenResult = await storeGoogleConnection(data.session, pendingIntent);
   if (tokenResult && !tokenResult.ok) {
     return {
       ok: false,
@@ -143,14 +169,18 @@ export async function completeOAuthRedirect(callbackUrl = window.location.href):
     message:
       tokenResult?.googleConnected
         ? "Google is connected. You can sync Gmail and Calendar without reconnecting."
+        : pendingIntent === "google-login"
+          ? "Signed in with Google. Open Sources to finish Gmail and Calendar connection."
         : `Signed in with ${String(provider)}.`,
   };
 }
 
-export async function storeGoogleConnection(session: Session | null): Promise<ConnectionResult | null> {
+export async function storeGoogleConnection(
+  session: Session | null,
+  pendingIntent?: OAuthIntent | null,
+): Promise<ConnectionResult | null> {
   if (!supabase || !session?.provider_token) return null;
-  const provider = session.user.app_metadata.provider;
-  if (provider !== "google") return null;
+  if (!shouldStoreGoogleConnection(session, pendingIntent)) return null;
 
   const { data, error } = await supabase.functions.invoke("store-google-connection", {
     body: {
@@ -172,6 +202,47 @@ export async function storeGoogleConnection(session: Session | null): Promise<Co
     message: data?.refreshTokenStored
       ? "Google connection saved for background sync."
       : "Google connection saved with the current access token.",
+  };
+}
+
+export function shouldStoreGoogleConnection(
+  session: Pick<Session, "provider_token" | "user"> | null,
+  pendingIntent?: OAuthIntent | null,
+): boolean {
+  if (!session?.provider_token) return false;
+  return pendingIntent === "google-workspace";
+}
+
+export function rememberPendingOAuthIntent(intent: OAuthIntent): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(pendingOAuthIntentStorageKey, intent);
+}
+
+export function consumePendingOAuthIntent(): OAuthIntent | null {
+  if (typeof window === "undefined") return null;
+  const rawIntent = window.localStorage.getItem(pendingOAuthIntentStorageKey);
+  clearPendingOAuthIntent();
+  return isOAuthIntent(rawIntent) ? rawIntent : null;
+}
+
+function clearPendingOAuthIntent(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(pendingOAuthIntentStorageKey);
+}
+
+function isOAuthIntent(value: string | null): value is OAuthIntent {
+  return value === "google-login" || value === "google-workspace" || value === "google" || value === "slack" || value === "whatsapp" || value === "microsoft" || value === "notion";
+}
+
+function buildGoogleWorkspaceOAuthOptions(provider: ReturnType<typeof getProviderByKey>) {
+  return {
+    redirectTo: getOAuthRedirectUrl(),
+    scopes: provider.scopes.join(" "),
+    queryParams: {
+      access_type: "offline",
+      include_granted_scopes: "true",
+      prompt: "consent",
+    },
   };
 }
 

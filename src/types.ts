@@ -35,8 +35,11 @@ export interface CalendarEvent {
   start: string;
   end: string;
   type: CalendarEventType;
+  provider?: string;
+  editable?: boolean;
   location?: string;
   attendees?: string[];
+  description?: string;
 }
 
 export interface ActionItem {

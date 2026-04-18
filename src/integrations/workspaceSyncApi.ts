@@ -2,6 +2,8 @@ import { supabase } from "./supabaseClient";
 
 export interface GoogleWorkspaceSyncRequest {
   date?: string;
+  dayStartIso?: string;
+  dayEndIso?: string;
   organizationId?: string;
   maxEmails?: number;
   maxEvents?: number;
@@ -12,6 +14,15 @@ export interface GoogleWorkspaceSyncResult {
   message: string;
   emailCount?: number;
   calendarEventCount?: number;
+}
+
+export interface MicrosoftWorkspaceSyncRequest {
+  date?: string;
+  dayStartIso?: string;
+  dayEndIso?: string;
+  organizationId?: string;
+  maxEmails?: number;
+  maxEvents?: number;
 }
 
 export interface GoogleWorkspaceConnectionStatus {
@@ -26,9 +37,9 @@ export async function getGoogleWorkspaceConnectionStatus(): Promise<GoogleWorksp
     .select("status")
     .eq("provider", "google")
     .eq("status", "connected")
-    .maybeSingle();
+    .limit(1);
   if (error) return { connected: false };
-  return { connected: Boolean(data), status: data?.status };
+  return { connected: Boolean(data?.length), status: data?.[0]?.status };
 }
 
 export async function syncGoogleWorkspace(
@@ -64,6 +75,32 @@ export async function syncGoogleWorkspace(
   return {
     ok: true,
     message: "Google Workspace sync complete.",
+    emailCount: data?.emailCount ?? 0,
+    calendarEventCount: data?.calendarEventCount ?? 0,
+  };
+}
+
+export async function syncMicrosoftWorkspace(
+  request: MicrosoftWorkspaceSyncRequest = {},
+): Promise<GoogleWorkspaceSyncResult> {
+  if (!supabase) {
+    return {
+      ok: false,
+      message: "Add Supabase env vars before syncing Microsoft 365.",
+    };
+  }
+
+  const { data, error } = await supabase.functions.invoke("sync-microsoft-workspace", {
+    body: request,
+  });
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  return {
+    ok: true,
+    message: "Microsoft 365 sync complete.",
     emailCount: data?.emailCount ?? 0,
     calendarEventCount: data?.calendarEventCount ?? 0,
   };

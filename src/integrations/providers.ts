@@ -27,9 +27,6 @@ export interface IntegrationProvider {
 }
 
 export const googleScopes = [
-  "openid",
-  "email",
-  "profile",
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar.events.readonly",
 ] as const;
@@ -48,7 +45,7 @@ export const integrationProviders: IntegrationProvider[] = [
       "Create a Supabase project and add the public URL and anon key to .env.",
       "Create a Google OAuth web client.",
       "Enable the Google provider in Supabase Auth.",
-      "Add Gmail and Calendar scopes to the Google consent screen.",
+      "Add Google sign-in plus Gmail and Calendar scopes to the Google consent screen.",
     ],
     serverRequired: false,
     accent: "green",
@@ -93,12 +90,12 @@ export const integrationProviders: IntegrationProvider[] = [
     name: "Microsoft 365",
     shortName: "Microsoft",
     authKind: "server-oauth",
-    summary: "Outlook mail and calendar for teams outside Google Workspace.",
+    summary: "Outlook mail and calendar for teams outside Google Workspace through a backend Microsoft Graph sync.",
     usefulFor: ["Outlook", "Microsoft Calendar", "Teams later"],
     scopes: ["Mail.Read", "Calendars.Read", "offline_access"],
     requiredSetup: [
       "Register an Azure app.",
-      "Add a backend token exchange route.",
+      "Add a backend token exchange route and deploy the Microsoft sync function.",
       "Store refresh tokens in Supabase with row-level security.",
     ],
     serverRequired: true,

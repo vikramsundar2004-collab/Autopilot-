@@ -1,0 +1,52 @@
+﻿<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="panel" x1="72" y1="56" x2="440" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF8"/>
+      <stop offset="1" stop-color="#F4FBF8"/>
+    </linearGradient>
+    <filter id="shadow" x="12" y="16" width="488" height="488" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#8CB9AA" flood-opacity="0.18"/>
+    </filter>
+    <linearGradient id="arcBlue" x1="166" y1="98" x2="350" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3F8CFF"/>
+      <stop offset="1" stop-color="#5FC7FF"/>
+    </linearGradient>
+    <linearGradient id="arcMint" x1="122" y1="220" x2="220" y2="370" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2EC7A6"/>
+      <stop offset="1" stop-color="#8DE4C8"/>
+    </linearGradient>
+    <linearGradient id="arcGold" x1="274" y1="120" x2="392" y2="246" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFB547"/>
+      <stop offset="1" stop-color="#FFD36C"/>
+    </linearGradient>
+    <linearGradient id="arcCoral" x1="292" y1="298" x2="404" y2="394" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF6E6E"/>
+      <stop offset="1" stop-color="#FF9A7A"/>
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="32" y="32" width="448" height="448" rx="120" fill="url(#panel)"/>
+    <rect x="32.75" y="32.75" width="446.5" height="446.5" rx="119.25" stroke="#D8E7E1" stroke-width="1.5"/>
+  </g>
+
+  <circle cx="128" cy="112" r="54" fill="#D9F2EE"/>
+  <circle cx="394" cy="130" r="32" fill="#FFE9BA"/>
+  <circle cx="110" cy="392" r="42" fill="#E2ECFF"/>
+  <circle cx="394" cy="390" r="56" fill="#FFE1DA"/>
+
+  <path d="M168 182C184 156 214 136 247 132" stroke="url(#arcBlue)" stroke-width="18" stroke-linecap="round"/>
+  <path d="M145 272C145 303 158 332 182 353" stroke="url(#arcMint)" stroke-width="18" stroke-linecap="round"/>
+  <path d="M269 134C309 138 345 159 366 193" stroke="url(#arcGold)" stroke-width="18" stroke-linecap="round"/>
+  <path d="M347 329C325 352 294 367 261 371" stroke="url(#arcCoral)" stroke-width="18" stroke-linecap="round"/>
+
+  <circle cx="256" cy="252" r="96" stroke="#E5EFEA" stroke-width="14"/>
+  <circle cx="256" cy="252" r="8" fill="#10222B"/>
+
+  <path d="M256 164L188 338H225L241 298H271L287 338H324L256 164Z" fill="#10222B"/>
+  <path d="M251 272H261L256 248L251 272Z" fill="#F7FBF8"/>
+  <rect x="223" y="278" width="66" height="18" rx="9" fill="#10222B"/>
+
+  <circle cx="340" cy="197" r="12" fill="#3F8CFF"/>
+  <path d="M335 172L342 156L349 172L365 179L349 186L342 202L335 186L319 179L335 172Z" fill="#2EC7A6"/>
+</svg>
