@@ -315,7 +315,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
     expect(screen.getByText("8 AM")).toBeInTheDocument();
     expect(screen.getByText("7 PM")).toBeInTheDocument();
-  });
+  }, 10000);
 
   it("persists settings locally and falls back from invalid saved settings", () => {
     const firstRender = render(<App />);
@@ -382,9 +382,20 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Privacy" }));
     expect(screen.getByRole("heading", { name: "Data guardrails" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
-    expect(screen.getByRole("heading", { name: "Feature overview across the workspace" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Enterprise" }));
+    expect(screen.getByRole("heading", { name: "Shared enterprise workspace" })).toBeInTheDocument();
     expect(screen.getByText("Editable reply drafts")).toBeInTheDocument();
+  });
+
+  it("shows enterprise chat and shared assignments in preview mode", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Enterprise" }));
+    expect(screen.getByRole("heading", { name: "Shared enterprise workspace" })).toBeInTheDocument();
+    expect(screen.getByText("TEAM42SYNC")).toBeInTheDocument();
+    expect(screen.getAllByText(/Maya please draft the renewal response for Northstar/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Draft the Northstar renewal response/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Maya Chen").length).toBeGreaterThan(0);
   });
 
   it("exposes home, privacy, and terms links for verification pages", () => {

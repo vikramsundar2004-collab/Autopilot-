@@ -10,7 +10,14 @@ import {
   type CalendarEventRow,
   type EmailMessageRow,
 } from "./workspaceData";
+import { getFunctionAuthorizationHeaders } from "./functionAuth";
 import { supabase } from "./supabaseClient";
+
+export type GoogleWorkspaceConnectionState =
+  | "connected"
+  | "needs_reauth"
+  | "disabled"
+  | "session";
 
 export interface GoogleWorkspaceSyncRequest {
   date?: string;
@@ -42,7 +49,7 @@ export interface MicrosoftWorkspaceSyncRequest {
 
 export interface GoogleWorkspaceConnectionStatus {
   connected: boolean;
-  status?: string;
+  status?: GoogleWorkspaceConnectionState;
 }
 
 export async function getGoogleWorkspaceConnectionStatus(): Promise<GoogleWorkspaceConnectionStatus> {
@@ -55,7 +62,7 @@ export async function getGoogleWorkspaceConnectionStatus(): Promise<GoogleWorksp
     .select("status")
     .eq("user_id", userId)
     .eq("provider", "google")
-    .eq("status", "connected")
+    .order("updated_at", { ascending: false })
     .limit(1);
   if (error) {
     return hasGoogleWorkspaceSessionFlag()
@@ -63,7 +70,8 @@ export async function getGoogleWorkspaceConnectionStatus(): Promise<GoogleWorksp
       : { connected: false };
   }
   if (data?.length) {
-    return { connected: true, status: data[0]?.status };
+    const status = normalizeGoogleConnectionState(data[0]?.status);
+    return { connected: status === "connected", status };
   }
   return hasGoogleWorkspaceSessionFlag()
     ? { connected: true, status: "session" }
@@ -92,8 +100,10 @@ export async function syncGoogleWorkspace(
 
   const session = sessionData.session as (typeof sessionData.session & { provider_token?: string }) | null;
   const providerAccessToken = session?.provider_token;
+  const headers = await getFunctionAuthorizationHeaders(session?.access_token);
 
   const { data, error } = await supabase.functions.invoke("sync-google-workspace", {
+    ...(headers ? { headers } : {}),
     body: {
       ...request,
       ...(providerAccessToken ? { providerAccessToken } : {}),
@@ -150,7 +160,10 @@ export async function syncMicrosoftWorkspace(
     };
   }
 
+  const headers = await getFunctionAuthorizationHeaders();
+
   const { data, error } = await supabase.functions.invoke("sync-microsoft-workspace", {
+    ...(headers ? { headers } : {}),
     body: request,
   });
 
@@ -171,4 +184,10 @@ export async function syncMicrosoftWorkspace(
     emails: [],
     calendarEvents: [],
   };
+}
+
+function normalizeGoogleConnectionState(value: unknown): GoogleWorkspaceConnectionState {
+  return value === "needs_reauth" || value === "disabled" || value === "session"
+    ? value
+    : "connected";
 }

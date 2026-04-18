@@ -91,6 +91,7 @@ create table if not exists public.action_items (
 create table if not exists public.organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  join_key text,
   plan text not null default 'enterprise' check (plan in ('free', 'pro', 'enterprise')),
   created_by uuid not null references auth.users(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -130,6 +131,32 @@ create table if not exists public.enterprise_policies (
   require_approval_for_external_writes boolean not null default true,
   allow_message_body_processing boolean not null default false,
   retention_days integer not null default 90 check (retention_days between 1 and 3650),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.enterprise_chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  sender_name text not null,
+  body text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.enterprise_assignments (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  source_chat_message_id uuid references public.enterprise_chat_messages(id) on delete set null,
+  created_by uuid references auth.users(id) on delete set null,
+  assigned_to_user_id uuid references auth.users(id) on delete set null,
+  assigned_to_label text not null,
+  title text not null,
+  detail text not null default '',
+  start_at timestamptz not null,
+  end_at timestamptz not null,
+  status text not null default 'open' check (status in ('open', 'done')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -307,6 +334,35 @@ begin
 end;
 $$;
 
+create or replace function public.generate_join_key()
+returns text
+language plpgsql
+as $$
+declare
+  candidate text;
+begin
+  loop
+    candidate := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10));
+    exit when not exists (
+      select 1
+      from public.organizations
+      where join_key = candidate
+    );
+  end loop;
+  return candidate;
+end;
+$$;
+
+update public.organizations
+set join_key = public.generate_join_key()
+where join_key is null;
+
+alter table public.organizations
+  alter column join_key set default public.generate_join_key();
+
+alter table public.organizations
+  alter column join_key set not null;
+
 create index if not exists connected_accounts_user_provider_idx
   on public.connected_accounts(user_id, provider);
 
@@ -321,6 +377,9 @@ create index if not exists action_items_user_status_due_idx
 
 create index if not exists organization_memberships_user_idx
   on public.organization_memberships(user_id, organization_id);
+
+create unique index if not exists organizations_join_key_idx
+  on public.organizations(join_key);
 
 create index if not exists email_messages_user_received_idx
   on public.email_messages(user_id, received_at desc);
@@ -342,6 +401,12 @@ create index if not exists audit_events_org_created_idx
 
 create index if not exists usage_events_org_created_idx
   on public.usage_events(organization_id, created_at desc);
+
+create index if not exists enterprise_chat_messages_org_created_idx
+  on public.enterprise_chat_messages(organization_id, created_at asc);
+
+create index if not exists enterprise_assignments_org_start_idx
+  on public.enterprise_assignments(organization_id, start_at asc);
 
 drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at
@@ -386,6 +451,16 @@ for each row execute function public.set_updated_at();
 drop trigger if exists enterprise_policies_set_updated_at on public.enterprise_policies;
 create trigger enterprise_policies_set_updated_at
 before update on public.enterprise_policies
+for each row execute function public.set_updated_at();
+
+drop trigger if exists enterprise_chat_messages_set_updated_at on public.enterprise_chat_messages;
+create trigger enterprise_chat_messages_set_updated_at
+before update on public.enterprise_chat_messages
+for each row execute function public.set_updated_at();
+
+drop trigger if exists enterprise_assignments_set_updated_at on public.enterprise_assignments;
+create trigger enterprise_assignments_set_updated_at
+before update on public.enterprise_assignments
 for each row execute function public.set_updated_at();
 
 drop trigger if exists email_messages_set_updated_at on public.email_messages;
@@ -501,6 +576,8 @@ alter table public.action_items enable row level security;
 alter table public.organizations enable row level security;
 alter table public.organization_memberships enable row level security;
 alter table public.enterprise_policies enable row level security;
+alter table public.enterprise_chat_messages enable row level security;
+alter table public.enterprise_assignments enable row level security;
 alter table public.email_messages enable row level security;
 alter table public.calendar_events enable row level security;
 alter table public.plan_runs enable row level security;
@@ -513,6 +590,21 @@ drop policy if exists "Users can read their profile" on public.profiles;
 create policy "Users can read their profile"
 on public.profiles for select
 using (auth.uid() = id);
+
+drop policy if exists "Org members can read shared profiles" on public.profiles;
+create policy "Org members can read shared profiles"
+on public.profiles for select
+using (
+  auth.uid() = id
+  or exists (
+    select 1
+    from public.organization_memberships viewer_membership
+    join public.organization_memberships target_membership
+      on viewer_membership.organization_id = target_membership.organization_id
+    where viewer_membership.user_id = auth.uid()
+      and target_membership.user_id = profiles.id
+  )
+);
 
 drop policy if exists "Users can update their profile" on public.profiles;
 create policy "Users can update their profile"
@@ -581,6 +673,33 @@ create policy "Admins can manage enterprise policies"
 on public.enterprise_policies for all
 using (public.has_org_admin_role(organization_id))
 with check (public.has_org_admin_role(organization_id));
+
+drop policy if exists "Members can read enterprise chat" on public.enterprise_chat_messages;
+create policy "Members can read enterprise chat"
+on public.enterprise_chat_messages for select
+using (public.is_org_member(organization_id));
+
+drop policy if exists "Members can send enterprise chat" on public.enterprise_chat_messages;
+create policy "Members can send enterprise chat"
+on public.enterprise_chat_messages for insert
+with check (auth.uid() = user_id and public.is_org_member(organization_id));
+
+drop policy if exists "Members can update their enterprise chat" on public.enterprise_chat_messages;
+create policy "Members can update their enterprise chat"
+on public.enterprise_chat_messages for update
+using (auth.uid() = user_id and public.is_org_member(organization_id))
+with check (auth.uid() = user_id and public.is_org_member(organization_id));
+
+drop policy if exists "Members can read enterprise assignments" on public.enterprise_assignments;
+create policy "Members can read enterprise assignments"
+on public.enterprise_assignments for select
+using (public.is_org_member(organization_id));
+
+drop policy if exists "Members can manage enterprise assignments" on public.enterprise_assignments;
+create policy "Members can manage enterprise assignments"
+on public.enterprise_assignments for all
+using (public.is_org_member(organization_id))
+with check (public.is_org_member(organization_id));
 
 drop policy if exists "Users can manage their email messages" on public.email_messages;
 create policy "Users can manage their email messages"

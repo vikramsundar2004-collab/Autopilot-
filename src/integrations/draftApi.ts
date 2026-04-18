@@ -1,6 +1,7 @@
 import type { DraftTheme } from "../emailDrafts";
 import type { EmailPriority, TaskCategory } from "../types";
 import { describeFunctionError } from "./functionErrors";
+import { getFunctionAuthorizationHeaders } from "./functionAuth";
 import { supabase } from "./supabaseClient";
 
 export interface DraftApiEmail {
@@ -49,7 +50,10 @@ export async function generateReplyDraftsApi(input: {
     };
   }
 
+  const headers = await getFunctionAuthorizationHeaders();
+
   const { data, error } = await supabase.functions.invoke("draft-email", {
+    ...(headers ? { headers } : {}),
     body: input,
   });
 

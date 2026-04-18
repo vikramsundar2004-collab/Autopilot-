@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
+import { EnterprisePage } from "./EnterprisePage";
 import {
   extractDraftSearchTerm,
   extractSenderEmails,
@@ -70,6 +71,19 @@ import {
   type AiSenderBlock,
 } from "./integrations/aiPrivacyApi";
 import {
+  analyzeEnterpriseChat,
+  createEnterpriseOrganization,
+  joinEnterpriseWithKey,
+  loadEnterpriseConversation,
+  loadEnterpriseWorkspace,
+  sendEnterpriseMessage,
+  updateEnterpriseAssignmentStatus,
+  type EnterpriseAssignment,
+  type EnterpriseChatMessage,
+  type EnterpriseMember,
+  type EnterpriseOrganization,
+} from "./integrations/enterpriseApi";
+import {
   type PlannerApiAction,
   type PlannerApiCalendarInput,
   type PlannerApiEmailInput,
@@ -79,6 +93,7 @@ import {
 import { loadLatestPlannerOutput } from "./integrations/plannerData";
 import { generateReplyDraftsApi } from "./integrations/draftApi";
 import {
+  type GoogleWorkspaceConnectionStatus,
   getGoogleWorkspaceConnectionStatus,
   syncGoogleWorkspace,
 } from "./integrations/workspaceSyncApi";
@@ -158,10 +173,15 @@ const pageLabels: Record<AppPage, string> = {
   customize: "Customize",
   calendar: "Calendar",
   privacy: "Privacy",
-  premium: "Overview",
+  premium: "Enterprise",
 };
 
 const premiumFeatures = [
+  {
+    title: "Enterprise team workspace",
+    outcome: "Create a company workspace, invite teammates with a key, collaborate in chat, and let AI schedule owned work on a shared calendar.",
+    surface: "Enterprise",
+  },
   {
     title: "Executive command brief",
     outcome: "Daily CEO-level summary of what must be done, what is blocked, and which relationships need attention.",
@@ -213,11 +233,72 @@ const premiumFeatures = [
     surface: "Customize",
   },
   {
-    title: "Feature overview page",
-    outcome: "A single in-app page explains the current product surface so the user can see what is already live.",
-    surface: "Overview",
+    title: "Feature overview surface",
+    outcome: "The enterprise page doubles as the in-app product map so the live feature set is always visible.",
+    surface: "Enterprise",
   },
 ] as const;
+
+const previewEnterpriseOrganizations: EnterpriseOrganization[] = [
+  {
+    id: "preview-enterprise-1",
+    name: "Autopilot Dad Team",
+    plan: "enterprise",
+    joinKey: "TEAM42SYNC",
+    createdBy: "preview-user",
+    createdAt: "2026-04-17T16:00:00.000Z",
+    updatedAt: "2026-04-17T16:00:00.000Z",
+  },
+];
+
+const previewEnterpriseMembers: EnterpriseMember[] = [
+  {
+    id: "preview-member-1",
+    organizationId: "preview-enterprise-1",
+    userId: "preview-user",
+    role: "owner",
+    fullName: "Vikram Sundar",
+    email: "vikram.sundar2004@gmail.com",
+  },
+  {
+    id: "preview-member-2",
+    organizationId: "preview-enterprise-1",
+    userId: "preview-maya",
+    role: "member",
+    fullName: "Maya Chen",
+    email: "maya@autopilot.ai",
+  },
+];
+
+const previewEnterpriseMessages: EnterpriseChatMessage[] = [
+  {
+    id: "preview-chat-1",
+    organizationId: "preview-enterprise-1",
+    userId: "preview-user",
+    senderName: "Vikram Sundar",
+    body: "Maya please draft the renewal response for Northstar and send me the update by 3 PM.",
+    createdAt: "2026-04-17T17:15:00.000Z",
+    updatedAt: "2026-04-17T17:15:00.000Z",
+  },
+];
+
+const previewEnterpriseAssignments: EnterpriseAssignment[] = [
+  {
+    id: "preview-assignment-1",
+    organizationId: "preview-enterprise-1",
+    sourceChatMessageId: "preview-chat-1",
+    createdBy: "preview-user",
+    assignedToUserId: "preview-maya",
+    assignedToLabel: "Maya Chen",
+    title: "Draft the Northstar renewal response",
+    detail: "Captured from enterprise chat and staged on the shared calendar.",
+    startAt: "2026-04-17T22:00:00.000Z",
+    endAt: "2026-04-17T23:00:00.000Z",
+    status: "open",
+    createdAt: "2026-04-17T17:16:00.000Z",
+    updatedAt: "2026-04-17T17:16:00.000Z",
+  },
+];
 
 function getInitialPage(): AppPage {
   const rawHash = window.location.hash.replace(/^#\/?/, "");
@@ -661,6 +742,98 @@ function normalizePlannerBlockType(blockType: string): CalendarEventType {
     : "focus";
 }
 
+function isGoogleReauthState(status: GoogleWorkspaceConnectionStatus["status"] | undefined) {
+  return status === "needs_reauth";
+}
+
+function googleConnectionCopy(status: GoogleWorkspaceConnectionStatus["status"] | undefined, session: Session | null) {
+  if (status === "connected" || status === "session") return "Google workspace connected";
+  if (status === "needs_reauth") return "Reconnect Google permissions";
+  if (session?.user.app_metadata.provider === "google") return "Google sign-in needs setup";
+  return "Google not connected";
+}
+
+function mapEnterpriseAssignmentToCalendarEvent(assignment: EnterpriseAssignment): CalendarEvent {
+  return {
+    id: `enterprise-${assignment.id}`,
+    title: `${assignment.assignedToLabel}: ${assignment.title}`,
+    start: assignment.startAt,
+    end: assignment.endAt,
+    type: "meeting",
+    provider: "enterprise",
+    editable: false,
+    description: assignment.detail,
+    attendees: [assignment.assignedToLabel],
+  };
+}
+
+function buildEnterpriseJoinKey() {
+  return Math.random().toString(36).slice(2, 12).toUpperCase();
+}
+
+function buildPreviewEnterpriseAssignments(input: {
+  message: EnterpriseChatMessage;
+  members: EnterpriseMember[];
+}): EnterpriseAssignment[] {
+  const lines = input.message.body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const assignments: EnterpriseAssignment[] = [];
+
+  lines.forEach((line, index) => {
+    const match = line.match(/^(?:@)?([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)[:,]?\s+(?:please\s+)?(.+)$/i);
+    if (!match) return;
+
+    const member = resolvePreviewMember(match[1], input.members);
+    const detail = match[2].replace(/[.?!]+$/, "").trim();
+    if (!/\b(send|draft|reply|review|prepare|update|schedule|share|check|finish|confirm|follow up|deliver|book|call)\b/i.test(detail)) {
+      return;
+    }
+
+    const window = buildPreviewAssignmentWindow(input.message.createdAt, index);
+    assignments.push({
+      id: `preview-assignment-${Date.now()}-${index}`,
+      organizationId: input.message.organizationId,
+      sourceChatMessageId: input.message.id,
+      createdBy: input.message.userId,
+      assignedToUserId: member?.userId,
+      assignedToLabel: member?.fullName ?? match[1],
+      title: detail.charAt(0).toUpperCase() + detail.slice(1),
+      detail: `Captured from enterprise chat. ${detail}`,
+      startAt: window.startAt,
+      endAt: window.endAt,
+      status: "open",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  return assignments;
+}
+
+function resolvePreviewMember(name: string, members: EnterpriseMember[]) {
+  const needle = name.trim().toLowerCase();
+  return (
+    members.find((member) => {
+      const fullName = member.fullName.toLowerCase();
+      const firstName = fullName.split(/\s+/)[0] ?? "";
+      return fullName === needle || firstName === needle;
+    }) ?? null
+  );
+}
+
+function buildPreviewAssignmentWindow(referenceTime: string, index: number) {
+  const start = new Date(referenceTime);
+  if (Number.isNaN(start.getTime())) {
+    start.setTime(Date.now());
+  }
+  start.setMinutes(0, 0, 0);
+  start.setHours(Math.max(9, Math.min(16, start.getHours() + 1 + index)));
+  const end = new Date(start.getTime() + 60 * 60_000);
+  return {
+    startAt: start.toISOString(),
+    endAt: end.toISOString(),
+  };
+}
+
 function App() {
   const authRequired = hasSupabaseConfig && import.meta.env.MODE !== "test";
   const previewMode = !authRequired;
@@ -675,11 +848,14 @@ function App() {
   const [isAuthReady, setIsAuthReady] = useState(!authRequired);
   const [authNotice, setAuthNotice] = useState(
     hasSupabaseConfig
-      ? "Sign in first. Then connect Gmail and Calendar from Sources."
+      ? "Sign in with Google to unlock Gmail and Calendar, or use email login for workspace-only access."
       : "Add Supabase env vars before testing login.",
   );
   const [loginEmail, setLoginEmail] = useState("");
-  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+  const [googleConnection, setGoogleConnection] = useState<GoogleWorkspaceConnectionStatus>({
+    connected: false,
+    status: undefined,
+  });
   const [settings, setSettings] = useState<CustomizationSettings>(initialState.settings);
   const [tutorialState, setTutorialState] = useState<TutorialState>(initialState.tutorial);
   const [isTutorialOpen, setIsTutorialOpen] = useState(
@@ -721,7 +897,9 @@ function App() {
   );
   const [draftTheme, setDraftTheme] = useState<DraftTheme>("direct");
   const [connectionNotice, setConnectionNotice] = useState(
-    "Add Supabase env vars when you are ready to test live OAuth.",
+    hasSupabaseConfig
+      ? "Sign in with Google to unlock Gmail and Calendar, then sync metadata into the workspace."
+      : "Add Supabase env vars when you are ready to test live OAuth.",
   );
   const [workspaceSource, setWorkspaceSource] = useState<WorkspaceDataSource>(
     previewMode ? "demo" : "empty",
@@ -729,7 +907,7 @@ function App() {
   const [workspaceNotice, setWorkspaceNotice] = useState(
     previewMode
       ? "Preview mode is using demo inbox and calendar data."
-      : "Sign in, then connect Gmail and Calendar from Sources before syncing live data.",
+      : "Sign in with Google, then sync Gmail and Calendar from Sources before planning live data.",
   );
   const [workspaceEmails, setWorkspaceEmails] = useState<EmailMessage[]>(
     previewMode ? demoEmails : [],
@@ -773,6 +951,31 @@ function App() {
     loadManualCalendarEvents(),
   );
   const [calendarDraft, setCalendarDraft] = useState<CalendarDraft | null>(null);
+  const [enterpriseOrganizations, setEnterpriseOrganizations] = useState<EnterpriseOrganization[]>(
+    previewMode ? previewEnterpriseOrganizations : [],
+  );
+  const [enterpriseMembers, setEnterpriseMembers] = useState<EnterpriseMember[]>(
+    previewMode ? previewEnterpriseMembers : [],
+  );
+  const [enterpriseMessages, setEnterpriseMessages] = useState<EnterpriseChatMessage[]>(
+    previewMode ? previewEnterpriseMessages : [],
+  );
+  const [enterpriseAssignments, setEnterpriseAssignments] = useState<EnterpriseAssignment[]>(
+    previewMode ? previewEnterpriseAssignments : [],
+  );
+  const [activeEnterpriseId, setActiveEnterpriseId] = useState<string | null>(
+    previewMode ? previewEnterpriseOrganizations[0]?.id ?? null : null,
+  );
+  const [enterpriseCreateName, setEnterpriseCreateName] = useState("");
+  const [enterpriseJoinKey, setEnterpriseJoinKey] = useState("");
+  const [enterpriseMessageDraft, setEnterpriseMessageDraft] = useState("");
+  const [enterpriseNotice, setEnterpriseNotice] = useState(
+    previewMode
+      ? "Preview mode includes a demo enterprise workspace with chat and assignments."
+      : "Create an enterprise or join one with a team key.",
+  );
+  const [isEnterpriseLoading, setIsEnterpriseLoading] = useState(false);
+  const isGoogleConnected = googleConnection.connected;
 
   const aiEligibleEmails = useMemo(
     () => filterAiBlockedEmails(workspaceEmails, aiSenderBlocks),
@@ -800,12 +1003,29 @@ function App() {
     () => manualCalendarEvents.filter((event) => localDateFromIso(event.start) === planningDate),
     [manualCalendarEvents, planningDate],
   );
+  const visibleEnterpriseCalendarEvents = useMemo(
+    () =>
+      enterpriseAssignments
+        .filter((assignment) => localDateFromIso(assignment.startAt) === planningDate)
+        .map(mapEnterpriseAssignmentToCalendarEvent),
+    [enterpriseAssignments, planningDate],
+  );
   const calendarEvents = useMemo(
     () =>
-      [...workspaceCalendarEvents, ...plannerCalendarEvents, ...visibleManualCalendarEvents].sort(
+      [
+        ...workspaceCalendarEvents,
+        ...plannerCalendarEvents,
+        ...visibleEnterpriseCalendarEvents,
+        ...visibleManualCalendarEvents,
+      ].sort(
         (left, right) => new Date(left.start).getTime() - new Date(right.start).getTime(),
       ),
-    [plannerCalendarEvents, visibleManualCalendarEvents, workspaceCalendarEvents],
+    [
+      plannerCalendarEvents,
+      visibleEnterpriseCalendarEvents,
+      visibleManualCalendarEvents,
+      workspaceCalendarEvents,
+    ],
   );
   const baseTasks = useMemo(
     () =>
@@ -843,6 +1063,10 @@ function App() {
   const sourceCount = useMemo(
     () => new Set(orderedTasks.map((task) => task.source)).size,
     [orderedTasks],
+  );
+  const activeEnterpriseMembers = useMemo(
+    () => enterpriseMembers.filter((member) => member.organizationId === activeEnterpriseId),
+    [activeEnterpriseId, enterpriseMembers],
   );
   const promotionalEmailCount = useMemo(
     () => workspaceEmails.filter((email) => isAdLikeEmail(email)).length,
@@ -932,7 +1156,7 @@ function App() {
 
   async function refreshGoogleConnectionStatus() {
     const status = await getGoogleWorkspaceConnectionStatus();
-    setIsGoogleConnected(status.connected);
+    setGoogleConnection(status);
   }
 
   async function refreshWorkspaceData() {
@@ -995,6 +1219,63 @@ function App() {
     setPrivacyControlNotice(result.message);
   }
 
+  async function refreshEnterpriseWorkspace() {
+    if (previewMode) return;
+
+    if (!authSession) {
+      setEnterpriseOrganizations([]);
+      setEnterpriseMembers([]);
+      setEnterpriseMessages([]);
+      setEnterpriseAssignments([]);
+      setActiveEnterpriseId(null);
+      setEnterpriseNotice("Sign in before creating or joining an enterprise.");
+      return;
+    }
+
+    setIsEnterpriseLoading(true);
+    const result = await loadEnterpriseWorkspace();
+    setEnterpriseNotice(result.message);
+    if (!result.ok) {
+      setEnterpriseOrganizations([]);
+      setEnterpriseMembers([]);
+      setEnterpriseMessages([]);
+      setEnterpriseAssignments([]);
+      setActiveEnterpriseId(null);
+      setIsEnterpriseLoading(false);
+      return;
+    }
+
+    setEnterpriseOrganizations(result.organizations);
+    setEnterpriseMembers(result.members);
+    setActiveEnterpriseId((current) =>
+      current && result.organizations.some((organization) => organization.id === current)
+        ? current
+        : result.organizations[0]?.id ?? null,
+    );
+    setIsEnterpriseLoading(false);
+  }
+
+  async function refreshEnterpriseConversation(organizationId: string | null) {
+    if (previewMode) return;
+    if (!authSession || !organizationId) {
+      setEnterpriseMessages([]);
+      setEnterpriseAssignments([]);
+      return;
+    }
+
+    setIsEnterpriseLoading(true);
+    const result = await loadEnterpriseConversation(organizationId);
+    setEnterpriseNotice(result.message);
+    if (result.ok) {
+      setEnterpriseMessages(result.messages);
+      setEnterpriseAssignments(result.assignments);
+    } else {
+      setEnterpriseMessages([]);
+      setEnterpriseAssignments([]);
+    }
+    setIsEnterpriseLoading(false);
+  }
+
   useEffect(() => {
     if (!authRequired || !supabase) return undefined;
 
@@ -1007,7 +1288,7 @@ function App() {
         setIsAuthReady(true);
       }
       if (data.session) {
-        refreshGoogleConnectionStatus();
+        void refreshGoogleConnectionStatus();
       }
     });
 
@@ -1015,11 +1296,11 @@ function App() {
       setAuthSession(session);
       setIsAuthReady(true);
       if (!session) {
-        setIsGoogleConnected(false);
+        setGoogleConnection({ connected: false, status: undefined });
         return;
       }
       window.setTimeout(() => {
-        refreshGoogleConnectionStatus();
+        void refreshGoogleConnectionStatus();
       }, 0);
     });
 
@@ -1036,6 +1317,14 @@ function App() {
   }, [authSession, planningDate, previewMode]);
 
   useEffect(() => {
+    void refreshEnterpriseWorkspace();
+  }, [authSession, previewMode]);
+
+  useEffect(() => {
+    void refreshEnterpriseConversation(activeEnterpriseId);
+  }, [activeEnterpriseId, authSession, previewMode]);
+
+  useEffect(() => {
     let isMounted = true;
     let removeNativeListener: (() => void) | undefined;
     const handleConnectionResult = (result: Awaited<ReturnType<typeof completeOAuthRedirect>>) => {
@@ -1043,7 +1332,9 @@ function App() {
       if (result) {
         setIsAuthReady(true);
         if (result.googleConnected) {
-          setIsGoogleConnected(true);
+          setGoogleConnection({ connected: true, status: "connected" });
+        } else {
+          void refreshGoogleConnectionStatus();
         }
         setConnectionNotice(result.message);
         setAuthNotice(result.message);
@@ -1378,13 +1669,17 @@ function App() {
     setConnectionNotice(result.message);
     setAuthNotice(result.message);
     if (result.googleConnected) {
-      setIsGoogleConnected(true);
+      setGoogleConnection({ connected: true, status: "connected" });
     }
   }
 
   async function syncGoogleWorkspaceData() {
+    if (isGoogleReauthState(googleConnection.status)) {
+      setConnectionNotice("Reconnect Google permissions from the Sources page before syncing again.");
+      return;
+    }
     if (!isGoogleConnected) {
-      setConnectionNotice("Finish Gmail and Calendar connection on Sources before syncing.");
+      setConnectionNotice("Sign in with Google to unlock Gmail and Calendar, then sync.");
       return;
     }
     const { dayStartIso, dayEndIso } = buildLocalDayRange(planningDate);
@@ -1402,7 +1697,7 @@ function App() {
         : `Google sync failed: ${result.message}`,
     );
     if (result.ok) {
-      setIsGoogleConnected(true);
+      setGoogleConnection({ connected: true, status: "connected" });
       setPlannerActionItems([]);
       setPlannerCalendarEvents([]);
       setWorkspaceSource("live");
@@ -1417,7 +1712,10 @@ function App() {
       if (result.persisted) {
         await refreshWorkspaceData();
       }
+      return;
     }
+
+    await refreshGoogleConnectionStatus();
   }
 
   async function blockSenderFromAi(email: EmailMessage) {
@@ -1495,7 +1793,7 @@ function App() {
   }
 
   async function loginWithGoogle() {
-    setAuthNotice("Opening Google sign-in...");
+    setAuthNotice("Opening Google sign-in for Gmail and Calendar...");
     const result = await startGoogleLogin();
     setAuthNotice(result.message);
   }
@@ -1512,11 +1810,206 @@ function App() {
     setAuthNotice(result.message);
     if (result.ok) {
       setAuthSession(null);
-      setIsGoogleConnected(false);
+      setGoogleConnection({ connected: false, status: undefined });
       setPlannerActionItems([]);
       setPlannerCalendarEvents([]);
       setAiSenderBlocks([]);
+      setEnterpriseOrganizations([]);
+      setEnterpriseMembers([]);
+      setEnterpriseMessages([]);
+      setEnterpriseAssignments([]);
+      setActiveEnterpriseId(null);
     }
+  }
+
+  async function copyEnterpriseJoinKey(joinKey: string) {
+    const copied = await copyTextToClipboard(joinKey);
+    setEnterpriseNotice(copied ? `Enterprise key ${joinKey} copied.` : "Copy failed. Select the key and copy it manually.");
+  }
+
+  async function createEnterpriseWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = enterpriseCreateName.trim();
+    if (!name) {
+      setEnterpriseNotice("Enter a name before creating the enterprise.");
+      return;
+    }
+
+    if (previewMode) {
+      const organizationId = `preview-enterprise-${Date.now()}`;
+      const organization: EnterpriseOrganization = {
+        id: organizationId,
+        name,
+        plan: "enterprise",
+        joinKey: buildEnterpriseJoinKey(),
+        createdBy: authSession?.user.id ?? "preview-user",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const owner: EnterpriseMember = {
+        id: `preview-member-${Date.now()}`,
+        organizationId,
+        userId: authSession?.user.id ?? "preview-user",
+        role: "owner",
+        fullName: authSession?.user.user_metadata.full_name ?? authSession?.user.email ?? "Workspace owner",
+        email: authSession?.user.email ?? "workspace@example.com",
+      };
+      setEnterpriseOrganizations((current) => [...current, organization]);
+      setEnterpriseMembers((current) => [...current, owner]);
+      setEnterpriseMessages((current) => current);
+      setEnterpriseAssignments((current) => current);
+      setActiveEnterpriseId(organizationId);
+      setEnterpriseCreateName("");
+      setEnterpriseNotice(`Created ${name}. Share join key ${organization.joinKey} with teammates.`);
+      return;
+    }
+
+    setIsEnterpriseLoading(true);
+    const result = await createEnterpriseOrganization(name);
+    setEnterpriseNotice(result.message);
+    if (result.ok) {
+      setEnterpriseCreateName("");
+      await refreshEnterpriseWorkspace();
+      setActiveEnterpriseId(result.data?.id ?? null);
+    }
+    setIsEnterpriseLoading(false);
+  }
+
+  async function joinEnterpriseWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const joinKey = enterpriseJoinKey.trim().toUpperCase();
+    if (!joinKey) {
+      setEnterpriseNotice("Enter an enterprise key before joining.");
+      return;
+    }
+
+    if (previewMode) {
+      const organization = enterpriseOrganizations.find((candidate) => candidate.joinKey === joinKey);
+      if (!organization) {
+        setEnterpriseNotice(`No preview enterprise matched ${joinKey}.`);
+        return;
+      }
+      setActiveEnterpriseId(organization.id);
+      setEnterpriseJoinKey("");
+      setEnterpriseNotice(`Opened ${organization.name} from the enterprise key.`);
+      return;
+    }
+
+    setIsEnterpriseLoading(true);
+    const result = await joinEnterpriseWithKey(joinKey);
+    setEnterpriseNotice(result.message);
+    if (result.ok) {
+      setEnterpriseJoinKey("");
+      await refreshEnterpriseWorkspace();
+      setActiveEnterpriseId(result.data?.id ?? null);
+    }
+    setIsEnterpriseLoading(false);
+  }
+
+  function selectEnterpriseWorkspace(organizationId: string) {
+    setActiveEnterpriseId(organizationId);
+    const organization = enterpriseOrganizations.find((candidate) => candidate.id === organizationId);
+    if (organization) {
+      setEnterpriseNotice(`Switched to ${organization.name}.`);
+    }
+  }
+
+  async function sendEnterpriseChatMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const body = enterpriseMessageDraft.trim();
+    if (!activeEnterpriseId) {
+      setEnterpriseNotice("Create or join an enterprise before sending chat.");
+      return;
+    }
+    if (!body) {
+      setEnterpriseNotice("Write a message before sending it to the enterprise chat.");
+      return;
+    }
+
+    if (previewMode) {
+      const message: EnterpriseChatMessage = {
+        id: `preview-chat-${Date.now()}`,
+        organizationId: activeEnterpriseId,
+        userId: authSession?.user.id ?? "preview-user",
+        senderName: authSession?.user.user_metadata.full_name ?? authSession?.user.email ?? "You",
+        body,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const nextMessages = [...enterpriseMessages, message];
+      const nextAssignments = buildPreviewEnterpriseAssignments({
+        message,
+        members: activeEnterpriseMembers,
+      });
+      setEnterpriseMessages(nextMessages);
+      if (nextAssignments.length > 0) {
+        setEnterpriseAssignments((current) => [...current, ...nextAssignments]);
+      }
+      setEnterpriseMessageDraft("");
+      setEnterpriseNotice(
+        nextAssignments.length > 0
+          ? `Preview AI captured ${nextAssignments.length} team assignment${nextAssignments.length === 1 ? "" : "s"} and placed them on the shared calendar.`
+          : "Preview chat saved. No explicit assigned action items were found.",
+      );
+      return;
+    }
+
+    setIsEnterpriseLoading(true);
+    const sendResult = await sendEnterpriseMessage({
+      organizationId: activeEnterpriseId,
+      body,
+      senderName: authSession?.user.user_metadata.full_name ?? authSession?.user.email ?? undefined,
+    });
+    if (!sendResult.ok || !sendResult.data) {
+      setEnterpriseNotice(sendResult.message);
+      setIsEnterpriseLoading(false);
+      return;
+    }
+
+    const messagesForAnalysis = [...enterpriseMessages, sendResult.data]
+      .filter((message) => message.organizationId === activeEnterpriseId)
+      .slice(-24)
+      .map((message) => ({
+        id: message.id,
+        senderName: message.senderName,
+        body: message.body,
+        createdAt: message.createdAt,
+      }));
+    const analysis = await analyzeEnterpriseChat({
+      organizationId: activeEnterpriseId,
+      messageId: sendResult.data.id,
+      timezone: "America/Los_Angeles",
+      messages: messagesForAnalysis,
+    });
+    setEnterpriseMessageDraft("");
+    setEnterpriseNotice(analysis.message || sendResult.message);
+    await refreshEnterpriseConversation(activeEnterpriseId);
+    setIsEnterpriseLoading(false);
+  }
+
+  async function markEnterpriseAssignmentComplete(assignmentId: string) {
+    if (previewMode) {
+      setEnterpriseAssignments((current) =>
+        current.map((assignment) =>
+          assignment.id === assignmentId
+            ? { ...assignment, status: "done", updatedAt: new Date().toISOString() }
+            : assignment,
+        ),
+      );
+      setEnterpriseNotice("Preview assignment marked done.");
+      return;
+    }
+
+    setIsEnterpriseLoading(true);
+    const result = await updateEnterpriseAssignmentStatus({
+      assignmentId,
+      status: "done",
+    });
+    setEnterpriseNotice(result.message);
+    if (result.ok && activeEnterpriseId) {
+      await refreshEnterpriseConversation(activeEnterpriseId);
+    }
+    setIsEnterpriseLoading(false);
   }
 
   async function runApiPlanner() {
@@ -1590,7 +2083,13 @@ function App() {
     if (!event.editable) {
       setCalendarDraft(null);
       setCalendarNotice(
-        `${event.title} came from ${event.provider === "microsoft" ? "Microsoft" : "Google"} and stays read-only until external write approval is enabled.`,
+        `${event.title} came from ${
+          event.provider === "microsoft"
+            ? "Microsoft"
+            : event.provider === "enterprise"
+              ? "the enterprise workspace"
+              : "Google"
+        } and stays read-only until external write approval is enabled.`,
       );
       return;
     }
@@ -2088,19 +2587,19 @@ function App() {
       case "sources":
         return (
           <>
-            <PageHeader
-              eyebrow="Sources"
-              title="Connect the platforms that create work"
-              body="Start with read-only Google Workspace through Supabase, then add server-backed Slack, WhatsApp, Microsoft, and Notion ingestion."
-            />
-            {settings.sections.integrations ? (
-              <IntegrationPanel
-                connectionNotice={connectionNotice}
-                googleConnected={isGoogleConnected}
-                isSyncing={isWorkspaceLoading}
-                onConnect={connectProvider}
-                onSyncGoogle={syncGoogleWorkspaceData}
+              <PageHeader
+                eyebrow="Sources"
+                title="Connect the platforms that create work"
+                body="Use one Google sign-in to unlock Gmail and Calendar, then add server-backed Slack, WhatsApp, Microsoft, and Notion ingestion."
               />
+              {settings.sections.integrations ? (
+                <IntegrationPanel
+                  connectionNotice={connectionNotice}
+                  googleConnection={googleConnection}
+                  isSyncing={isWorkspaceLoading}
+                  onConnect={connectProvider}
+                  onSyncGoogle={syncGoogleWorkspaceData}
+                />
             ) : (
               <HiddenSectionNotice
                 title="Sources are hidden"
@@ -2257,11 +2756,31 @@ function App() {
         );
       case "premium":
         return (
-          <PremiumValuePage
+          <EnterprisePage
+            activeOrganizationId={activeEnterpriseId}
+            assignments={enterpriseAssignments}
+            createEnterpriseName={enterpriseCreateName}
+            featureCards={premiumFeatures}
+            isBusy={isEnterpriseLoading}
+            joinKeyInput={enterpriseJoinKey}
+            members={enterpriseMembers}
+            messages={enterpriseMessages}
+            messageDraft={enterpriseMessageDraft}
+            notice={enterpriseNotice}
+            organizations={enterpriseOrganizations}
+            onCopyJoinKey={copyEnterpriseJoinKey}
+            onCreateEnterprise={createEnterpriseWorkspace}
+            onCreateEnterpriseNameChange={setEnterpriseCreateName}
+            onJoinEnterprise={joinEnterpriseWorkspace}
+            onJoinKeyChange={setEnterpriseJoinKey}
+            onMarkAssignmentDone={markEnterpriseAssignmentComplete}
+            onMessageDraftChange={setEnterpriseMessageDraft}
             onOpenActions={() => navigate("actions")}
             onOpenDrafts={() => navigate("drafts")}
             onOpenCalendar={() => navigate("calendar")}
             onOpenSources={() => navigate("sources")}
+            onSelectOrganization={selectEnterpriseWorkspace}
+            onSendMessage={sendEnterpriseChatMessage}
           />
         );
       default:
@@ -2293,7 +2812,7 @@ function App() {
     >
       <Sidebar
         activePage={activePage}
-        googleConnected={isGoogleConnected}
+        googleConnection={googleConnection}
         layout={settings.layout}
         session={authSession}
         onNavigate={navigate}
@@ -2353,23 +2872,23 @@ function LoginPage({
           </div>
         </div>
         <span className="eyebrow">Start here</span>
-        <h1 id="login-title">Get into the workspace first. Connect Gmail and Calendar after that.</h1>
+        <h1 id="login-title">Sign in once and unlock Gmail, Calendar, and planning.</h1>
         <p className="auth-copy">
-          Google sign-in here is only the session step. The Sources page handles Gmail and Calendar
-          connection later, so the first screen stays simpler and easier to trust.
+          Google sign-in is the main path for inbox and calendar planning. It stores encrypted Google
+          tokens for durable sync, caches only metadata, and avoids saving full email bodies.
         </p>
         <div className="auth-steps" aria-label="Sign-in flow">
           <article className="auth-step">
             <strong>1. Sign in</strong>
-            <p>Create the workspace session.</p>
+            <p>Use Google for Gmail and Calendar access, or email for workspace-only login.</p>
           </article>
           <article className="auth-step">
-            <strong>2. Connect sources</strong>
-            <p>Upgrade to Gmail and Calendar when you are ready.</p>
+            <strong>2. Sync metadata</strong>
+            <p>Load recent Gmail and today's Calendar events without storing full email bodies.</p>
           </article>
           <article className="auth-step">
             <strong>3. Sync and plan</strong>
-            <p>Pull real context into the day view and drafts.</p>
+            <p>Turn live inbox and calendar context into action items, drafts, and schedule blocks.</p>
           </article>
         </div>
         <button className="google-login-button" type="button" onClick={onGoogleLogin}>
@@ -2415,14 +2934,14 @@ function SiteLinks({ className }: { className?: string }) {
 
 function Sidebar({
   activePage,
-  googleConnected,
+  googleConnection,
   layout,
   session,
   onNavigate,
   onSignOut,
 }: {
   activePage: AppPage;
-  googleConnected: boolean;
+  googleConnection: GoogleWorkspaceConnectionStatus;
   layout: CustomizationSettings["layout"];
   session: Session | null;
   onNavigate: (page: AppPage) => void;
@@ -2444,11 +2963,7 @@ function Sidebar({
     ...layout.pageOrder.filter((page) => !layout.pinnedPages.includes(page)),
   ].filter((page): page is AppPage => appPages.includes(page as AppPage));
   const userEmail = session?.user.email ?? "Mock workspace";
-  const connectionLabel = googleConnected
-    ? "Google workspace connected"
-    : session?.user.app_metadata.provider === "google"
-      ? "Signed in with Google"
-      : "Google not connected";
+  const connectionLabel = googleConnectionCopy(googleConnection.status, session);
 
   return (
     <aside className={`sidebar sidebar-style-${layout.sidebarStyle}`} aria-label="Primary">
@@ -2568,17 +3083,20 @@ function HiddenSectionNotice({
 
 function IntegrationPanel({
   connectionNotice,
-  googleConnected,
+  googleConnection,
   isSyncing,
   onConnect,
   onSyncGoogle,
 }: {
   connectionNotice: string;
-  googleConnected: boolean;
+  googleConnection: GoogleWorkspaceConnectionStatus;
   isSyncing: boolean;
   onConnect: (key: IntegrationKey) => void;
   onSyncGoogle: () => void;
 }) {
+  const googleConnected = googleConnection.connected;
+  const googleNeedsReauth = isGoogleReauthState(googleConnection.status);
+
   return (
     <section className="integration-panel" aria-labelledby="integration-title">
       <div className="section-heading">
@@ -2597,20 +3115,22 @@ function IntegrationPanel({
           className="primary-action"
           type="button"
           onClick={onSyncGoogle}
-          disabled={!hasSupabaseConfig || !googleConnected || isSyncing}
+          disabled={!hasSupabaseConfig || !googleConnected || googleNeedsReauth || isSyncing}
         >
           {isSyncing ? "Syncing Google data..." : "Sync Google data"}
         </button>
         <span className="inline-help">
-          {googleConnected
-            ? "Google is saved. Sync stores recent Gmail and today's Calendar events."
-            : "Finish Gmail and Calendar connection to enable sync."}
+          {googleNeedsReauth
+            ? "Google permissions need to be reconnected before Gmail and Calendar sync can continue."
+            : googleConnected
+              ? "Google is connected. Sync stores Gmail and Calendar metadata only, never full email bodies."
+              : "Sign in with Google to unlock Gmail and Calendar, then sync metadata into the workspace."}
         </span>
       </div>
       <div className="integration-grid">
         {integrationProviders.map((provider) => (
           <IntegrationCard
-            googleConnected={googleConnected}
+            googleConnection={googleConnection}
             key={provider.key}
             provider={provider}
             onConnect={onConnect}
@@ -3117,60 +3637,6 @@ function ReplyDraftsPage({
             <p>Sync Gmail, then ask the assistant to generate a draft or open this page again.</p>
           </article>
         )}
-      </section>
-    </>
-  );
-}
-
-function PremiumValuePage({
-  onOpenActions,
-  onOpenDrafts,
-  onOpenCalendar,
-  onOpenSources,
-}: {
-  onOpenActions: () => void;
-  onOpenDrafts: () => void;
-  onOpenCalendar: () => void;
-  onOpenSources: () => void;
-}) {
-  return (
-    <>
-      <PageHeader
-        eyebrow="Overview"
-        title="What this build already includes"
-        body="This page is the in-app feature overview, not pricing. It shows the capabilities already present in the product and where each one lives."
-      />
-      <section className="premium-panel" aria-labelledby="premium-title">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">Built into this version</span>
-            <h2 id="premium-title">Feature overview across the workspace</h2>
-          </div>
-          <div className="status-pill ready">Feature map</div>
-        </div>
-        <div className="premium-grid">
-          {premiumFeatures.map((feature) => (
-            <article className="premium-card" key={feature.title}>
-              <span>{feature.surface}</span>
-              <h3>{feature.title}</h3>
-              <p>{feature.outcome}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-      <section className="premium-actions" aria-label="Premium workflows">
-        <button className="primary-action" type="button" onClick={onOpenSources}>
-          Configure sources
-        </button>
-        <button className="secondary-action" type="button" onClick={onOpenDrafts}>
-          Open drafts
-        </button>
-        <button className="secondary-action" type="button" onClick={onOpenActions}>
-          Test action engine
-        </button>
-        <button className="secondary-action" type="button" onClick={onOpenCalendar}>
-          Open calendar operations
-        </button>
       </section>
     </>
   );
@@ -4378,22 +4844,30 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function IntegrationCard({
-  googleConnected,
+  googleConnection,
   provider,
   onConnect,
 }: {
-  googleConnected: boolean;
+  googleConnection: GoogleWorkspaceConnectionStatus;
   provider: IntegrationProvider;
   onConnect: (key: IntegrationKey) => void;
 }) {
   const readiness = getConnectionReadiness(provider, hasSupabaseConfig);
-  const isConnected = provider.key === "google" && googleConnected;
-  const actionLabel =
-    isConnected
-      ? "Connected"
-      : readiness === "ready"
-      ? `Connect ${provider.shortName}`
-      : "Open setup";
+  const isGoogleProvider = provider.key === "google";
+  const isConnected = isGoogleProvider && googleConnection.connected;
+  const needsReauth = isGoogleProvider && isGoogleReauthState(googleConnection.status);
+  let actionLabel = readiness === "ready" ? `Connect ${provider.shortName}` : "Open setup";
+  if (isGoogleProvider) {
+    actionLabel = isConnected
+      ? "Google connected"
+      : needsReauth
+        ? "Reconnect Google permissions"
+        : readiness === "ready"
+          ? "Sign in with Google to unlock Gmail and Calendar"
+          : "Open setup";
+  } else if (isConnected) {
+    actionLabel = "Connected";
+  }
 
   return (
     <article className={`integration-card ${provider.accent}`}>
@@ -4411,7 +4885,9 @@ function IntegrationCard({
       <p className="integration-detail">
         {readiness === "needs-server"
           ? `Backend route required. First setup step: ${provider.requiredSetup[0]}`
-          : `Scopes visible before connect: ${provider.scopes.join(", ")}`}
+          : isGoogleProvider
+            ? "One Google sign-in grants Gmail and Calendar access, stores encrypted Google tokens for durable sync, and caches metadata only."
+            : `Scopes visible before connect: ${provider.scopes.join(", ")}`}
       </p>
       <button
         type="button"

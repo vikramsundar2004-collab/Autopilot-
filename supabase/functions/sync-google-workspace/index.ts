@@ -89,7 +89,24 @@ Deno.serve(async (req) => {
     gmailMessages = await fetchGmailMessages(providerAccessToken, maxEmails);
     calendarEvents = await fetchCalendarEvents(providerAccessToken, date, maxEvents, dayStartIso, dayEndIso);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Google sync failed." }, 502);
+    const message = error instanceof Error ? error.message : "Google sync failed.";
+    if (isGooglePermissionsError(message)) {
+      await markGoogleConnectionStatus(serviceClient, {
+        userId,
+        organizationId,
+        providerUserId: authData.user.email ?? userId,
+        status: "needs_reauth",
+      });
+      return json(
+        {
+          error:
+            "Google permissions need to be reconnected. Sign in with Google again to restore Gmail and Calendar access.",
+          status: "needs_reauth",
+        },
+        401,
+      );
+    }
+    return json({ error: message }, 502);
   }
 
   const emailRows = gmailMessages.map((message) => ({
@@ -291,6 +308,35 @@ async function safeBody(req: Request): Promise<Record<string, any>> {
   }
 }
 
+async function markGoogleConnectionStatus(
+  serviceClient: any,
+  input: {
+    userId: string;
+    organizationId: string | null;
+    providerUserId: string;
+    status: "connected" | "needs_reauth" | "disabled";
+  },
+) {
+  await serviceClient.from("connected_accounts").upsert(
+    {
+      user_id: input.userId,
+      organization_id: input.organizationId,
+      provider: "google",
+      provider_user_id: input.providerUserId,
+      scopes: [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/calendar.events.readonly",
+      ],
+      status: input.status,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,provider,provider_user_id" },
+  );
+}
+
 async function resolveGoogleAccessToken(
   serviceClient: any,
   input: {
@@ -351,6 +397,20 @@ async function resolveGoogleAccessToken(
         : { ok: true, accessToken: refreshed.accessToken };
     }
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not resolve Google token.";
+    if (isGoogleRefreshReauthError(message)) {
+      await markGoogleConnectionStatus(serviceClient, {
+        userId: input.userId,
+        organizationId: input.organizationId,
+        providerUserId: input.providerUserId,
+        status: "needs_reauth",
+      });
+      return {
+        ok: false,
+        error: "Google permissions expired. Sign in with Google again to restore Gmail and Calendar access.",
+        status: 401,
+      };
+    }
     return { ok: false, error: error instanceof Error ? error.message : "Could not resolve Google token.", status: 500 };
   }
 
@@ -513,6 +573,24 @@ function parseSenderName(sender: string) {
 function parseSenderEmail(sender: string) {
   const match = sender.match(/<([^>]+)>/);
   return (match?.[1] ?? sender).trim();
+}
+
+function isGoogleRefreshReauthError(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("google token refresh failed 400") ||
+    normalized.includes("google token refresh failed 401") ||
+    normalized.includes("invalid_grant")
+  );
+}
+
+function isGooglePermissionsError(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("google api 401") ||
+    normalized.includes("insufficient authentication scopes") ||
+    normalized.includes("insufficientpermissions")
+  );
 }
 
 function clamp(value: unknown, min: number, max: number, fallback: number) {

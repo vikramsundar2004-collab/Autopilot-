@@ -988,6 +988,176 @@ h3 {
   margin-top: 0;
 }
 
+.enterprise-summary {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(22, 19, 17, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 252, 247, 0.94);
+  color: var(--muted);
+  box-shadow: var(--shadow-soft);
+}
+
+.enterprise-summary p {
+  margin: 0;
+}
+
+.enterprise-overview-grid,
+.enterprise-workspace-grid {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.enterprise-overview-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.enterprise-workspace-grid {
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+}
+
+.enterprise-panel {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid rgba(22, 19, 17, 0.08);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(255, 248, 239, 0.92));
+  box-shadow: var(--shadow-soft);
+}
+
+.enterprise-form {
+  display: grid;
+  gap: 12px;
+}
+
+.enterprise-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.enterprise-form input,
+.enterprise-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.enterprise-form textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.enterprise-selector,
+.enterprise-member-list,
+.enterprise-assignment-list {
+  display: grid;
+  gap: 12px;
+}
+
+.enterprise-selector {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.enterprise-selector-chip {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid rgba(22, 19, 17, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 252, 247, 0.96);
+  color: var(--text);
+  font-weight: 700;
+  text-align: left;
+}
+
+.enterprise-selector-chip.active {
+  color: #fff9f0;
+  background: linear-gradient(135deg, rgba(191, 90, 51, 0.9), rgba(143, 63, 34, 0.94));
+}
+
+.enterprise-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.enterprise-meta-card,
+.enterprise-member-card,
+.enterprise-chat-bubble,
+.enterprise-assignment-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(22, 19, 17, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 252, 247, 0.98);
+}
+
+.enterprise-meta-card p,
+.enterprise-member-card p,
+.enterprise-chat-bubble p,
+.enterprise-assignment-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.enterprise-key-row,
+.enterprise-chat-meta,
+.enterprise-assignment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.enterprise-key-row code {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(18, 19, 22, 0.06);
+  font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+  font-size: 0.84rem;
+}
+
+.enterprise-member-card span,
+.enterprise-assignment-meta span {
+  width: max-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(38, 91, 213, 0.1);
+  color: #2357c5;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.enterprise-chat-log {
+  display: grid;
+  gap: 12px;
+  max-height: 440px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.enterprise-chat-bubble {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.enterprise-chat-meta span,
+.enterprise-assignment-meta small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+}
+
 .assistant-panel,
 .draft-card {
   border: 1px solid rgba(22, 19, 17, 0.08);
@@ -2779,6 +2949,9 @@ h3 {
 
   .metric-strip,
   .insight-rail,
+  .enterprise-meta-grid,
+  .enterprise-overview-grid,
+  .enterprise-workspace-grid,
   .integration-grid,
   .improvement-overview,
   .improvement-layout,
@@ -2848,6 +3021,7 @@ h3 {
   .integration-panel,
   .improvement-section,
   .momentum-panel,
+  .enterprise-panel,
   .premium-panel,
   .productivity-panel,
   .rescue-panel,
