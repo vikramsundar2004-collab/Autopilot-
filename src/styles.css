@@ -877,9 +877,13 @@ h3 {
   background: rgba(255, 255, 255, 0.82);
 }
 
+.digest-hero-copy {
+  display: grid;
+  gap: 12px;
+}
+
 .digest-hero-copy strong {
   display: block;
-  margin-bottom: 8px;
   font-family: "Sora", "Source Sans 3", sans-serif;
   font-size: 1.15rem;
   line-height: 1.25;
@@ -2905,7 +2909,7 @@ h3 {
   height: 56px;
 }
 
-.calendar-time-row span {
+.calendar-time-label {
   padding: 7px 8px 0 0;
   color: var(--muted);
   font-size: 0.68rem;
@@ -2914,10 +2918,11 @@ h3 {
 
 .calendar-slot-button {
   display: flex;
-  align-items: start;
+  align-items: flex-start;
   justify-content: flex-end;
   width: 100%;
-  padding: 8px 10px 0 0;
+  height: 100%;
+  padding: 0;
   border-left: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   color: var(--muted);
@@ -2925,20 +2930,21 @@ h3 {
   cursor: pointer;
 }
 
-.calendar-slot-button span {
+.calendar-slot-copy {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 40px;
   min-height: 22px;
+  margin: 8px 10px 0 0;
   padding: 0 8px;
   border-radius: 999px;
   background: rgba(245, 239, 230, 0.92);
   font-size: 0.72rem;
 }
 
-.calendar-slot-button:hover span,
-.calendar-slot-button:focus-visible span {
+.calendar-slot-button:hover .calendar-slot-copy,
+.calendar-slot-button:focus-visible .calendar-slot-copy {
   color: var(--primary-strong);
   background: rgba(31, 138, 104, 0.14);
 }
@@ -2946,6 +2952,7 @@ h3 {
 .calendar-events-layer {
   position: absolute;
   inset: 0 8px 0 58px;
+  pointer-events: none;
 }
 
 .calendar-event-block {
@@ -2965,6 +2972,7 @@ h3 {
   color: #1c3f7a;
   background: #e8f0fe;
   cursor: pointer;
+  pointer-events: auto;
   text-align: left;
 }
 
@@ -3819,19 +3827,19 @@ h3 {
   grid-template-columns: 68px minmax(0, 1fr);
 }
 
-.calendar-time-row span {
+.calendar-time-label {
   padding: 10px 10px 0 0;
   font-size: 0.76rem;
 }
 
 .calendar-slot-button {
   justify-content: flex-end;
-  padding: 10px 14px 0 0;
 }
 
-.calendar-slot-button span {
+.calendar-slot-copy {
   min-width: 44px;
   min-height: 24px;
+  margin: 10px 14px 0 0;
   border: 1px solid rgba(22, 19, 17, 0.04);
   background: rgba(248, 244, 238, 0.92);
 }

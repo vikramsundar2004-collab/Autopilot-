@@ -137,6 +137,17 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Daily digest" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("keeps the digest narrative to one or two paragraphs", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Daily digest" }));
+
+    const narrative = screen.getByLabelText("Digest narrative");
+    const paragraphs = narrative.querySelectorAll("p");
+    expect(paragraphs.length).toBeGreaterThanOrEqual(1);
+    expect(paragraphs.length).toBeLessThanOrEqual(2);
+  });
+
   it("creates handoffs that move work into waiting with a reusable share link", () => {
     render(<App />);
 
@@ -171,6 +182,8 @@ describe("App", () => {
     expect(screen.getByLabelText("Daily calendar")).toBeInTheDocument();
     expect(screen.getAllByText("Thursday, April 16").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Team standup").length).toBeGreaterThan(0);
+    expect(screen.getByText("12 AM")).toBeInTheDocument();
+    expect(screen.getByText("11 PM")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open Wednesday, April 15" }));
     expect(screen.getAllByText("Wednesday, April 15").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
@@ -204,6 +217,16 @@ describe("App", () => {
     fireEvent.click(screen.getByText("Save calendar item"));
 
     expect(screen.getAllByText("10:00 AM - 11:30 AM").length).toBeGreaterThan(0);
+  });
+
+  it("opens a late-night draft from the visible full-day calendar", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Calendar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add event at 11 PM" }));
+
+    expect(screen.getByLabelText("Calendar event start time")).toHaveValue("23:00");
+    expect(screen.getByLabelText("Calendar event end time")).toHaveValue("23:59");
   });
 
   it("opens a visible calendar draft from the new-event button", () => {

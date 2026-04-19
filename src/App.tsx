@@ -96,6 +96,7 @@ import {
 import {
   runDailyDigest,
   type DailyDigestActionItem,
+  type DailyDigestInterestEvent,
   type DailyDigestResult,
 } from "./integrations/dailyDigestApi";
 import { loadLatestPlannerOutput } from "./integrations/plannerData";
@@ -2327,16 +2328,12 @@ function App() {
   }
 
   function startCalendarDraft(
-    hour = settings.calendar.startHour,
+    hour = getPreferredCalendarDraftHour(settings.calendar.startHour, settings.calendar.endHour),
     seed?: Partial<CalendarDraft>,
   ) {
-    const safeHour = Math.min(Math.max(hour, settings.calendar.startHour), settings.calendar.endHour - 1);
+    const safeHour = Math.min(Math.max(hour, 0), 23);
     const startTime = seed?.startTime ?? `${String(safeHour).padStart(2, "0")}:00`;
-    const endHour = Math.min(
-      safeHour + Math.max(1, Math.round((seed?.endTime ? 0 : 1))),
-      settings.calendar.endHour,
-    );
-    const endTime = seed?.endTime ?? `${String(endHour).padStart(2, "0")}:00`;
+    const endTime = seed?.endTime ?? addMinutesToTime(startTime, 60);
     setCalendarDraft({
       id: seed?.id,
       title: seed?.title ?? "",
@@ -3067,7 +3064,9 @@ function App() {
               setupComplete={assistantSetupComplete}
               onCancelDraft={cancelCalendarDraft}
               onCreateDraft={() => {
-                startCalendarDraft(settings.calendar.startHour + 1);
+                startCalendarDraft(
+                  getPreferredCalendarDraftHour(settings.calendar.startHour, settings.calendar.endHour),
+                );
                 setCalendarNotice("Drafting a new calendar block.");
               }}
               onDraftChange={updateCalendarDraft}
@@ -4568,8 +4567,8 @@ function CustomizationPanel({
               Start hour
               <input
                 aria-label="Calendar start hour"
-                min={5}
-                max={22}
+                min={0}
+                max={23}
                 type="number"
                 value={settings.calendar.startHour}
                 onChange={(event) => updateCalendar({ startHour: Number(event.target.value) })}
@@ -4579,8 +4578,8 @@ function CustomizationPanel({
               End hour
               <input
                 aria-label="Calendar end hour"
-                min={6}
-                max={23}
+                min={1}
+                max={24}
                 type="number"
                 value={settings.calendar.endHour}
                 onChange={(event) => updateCalendar({ endHour: Number(event.target.value) })}
@@ -5584,6 +5583,8 @@ function DailyDigestPanel({
   onRunDigest: () => void;
   onToggleInterest: (interest: string) => void;
 }) {
+  const digestParagraphs = buildDigestParagraphs(digest);
+
   return (
     <section className="daily-digest-panel" aria-labelledby="daily-digest-title">
       <div className="section-heading">
@@ -5598,9 +5599,11 @@ function DailyDigestPanel({
       <p className="section-note">{notice}</p>
       <div className="digest-grid">
         <article className="digest-card">
-          <div className="digest-hero-copy">
+          <div className="digest-hero-copy" aria-label="Digest narrative">
             <strong>{digest.headline}</strong>
-            <p>{digest.brief}</p>
+            {digestParagraphs.map((paragraph, index) => (
+              <p key={`digest-paragraph-${index}`}>{paragraph}</p>
+            ))}
           </div>
 
           <div className="digest-block">
@@ -5638,7 +5641,7 @@ function DailyDigestPanel({
           <div className="digest-block">
             <h3>Interest brief</h3>
             <p className="section-note">
-              Pick the topics that matter to you. The AI digest browses the web for recent news before it writes the brief.
+              Pick the topics that matter to you. The AI digest pulls the last two weeks of updates before it writes the brief.
             </p>
             <div className="interest-chip-row" aria-label="Suggested interests">
               {digestInterestSuggestions.map((interest) => (
@@ -5686,7 +5689,7 @@ function DailyDigestPanel({
           </div>
 
           <div className="digest-block">
-            <h3>Recent events for your interests</h3>
+            <h3>Two-week updates for your interests</h3>
             {digest.interestEvents.length > 0 ? (
               <div className="interest-event-list">
                 {digest.interestEvents.map((event) => (
@@ -6048,7 +6051,9 @@ function FullCalendarSection({
             </div>
             <div className="calendar-range-chip">
               <span>
-                {preferences.startHour}:00 - {preferences.endHour}:00
+                {preferences.startHour === 0 && preferences.endHour === 24
+                  ? "Full day"
+                  : `${preferences.startHour}:00 - ${preferences.endHour}:00`}
               </span>
             </div>
           </div>
@@ -6117,14 +6122,14 @@ function FullCalendarSection({
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
                 >
-                  <span>{formatHourLabel(hour)}</span>
+                  <span className="calendar-time-label">{formatHourLabel(hour)}</span>
                   <button
                     aria-label={`Add event at ${formatHourLabel(hour)}`}
                     className="calendar-slot-button"
                     type="button"
                     onClick={() => onSlotClick(hour)}
                   >
-                    <span>Add</span>
+                    <span className="calendar-slot-copy">Tap to create</span>
                   </button>
                 </div>
               ))}
@@ -6152,7 +6157,7 @@ function FullCalendarSection({
                     <span>
                       {formatTime(placement.event.start)} - {formatTime(placement.event.end)}
                     </span>
-                    <small>{placement.event.editable ? "Editable" : "Read only"}</small>
+                    <small>{placement.event.editable ? "Tap to edit" : "Read only"}</small>
                   </button>
                 ))}
               </div>
@@ -6376,7 +6381,7 @@ function CalendarDraftEditor({
       ) : (
         <div className="calendar-editor-empty">
           <strong>Nothing selected yet</strong>
-          <p>Tap a time row to add a user-controlled block, or open one of your own calendar items to change it.</p>
+          <p>Tap any open time on the calendar to add a user-controlled block, or open one of your own items to change it.</p>
           <button className="primary-action" type="button" onClick={onCreateDraft}>
             Create new event
           </button>
@@ -6760,6 +6765,37 @@ function normalizeDigestInterest(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 40);
 }
 
+function buildDigestParagraphs(digest: DailyDigestResult): string[] {
+  const baseParagraphs = String(digest.brief ?? "")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  const interestParagraph = buildInterestRoundupParagraph(digest.interestEvents);
+
+  if (interestParagraph) {
+    if (baseParagraphs.length === 0) return [interestParagraph];
+    if (baseParagraphs.length === 1) return [baseParagraphs[0], interestParagraph];
+    return [baseParagraphs[0], `${baseParagraphs.slice(1).join(" ")} ${interestParagraph}`.trim()];
+  }
+
+  return baseParagraphs.length > 0 ? baseParagraphs : ["No digest summary is ready yet."];
+}
+
+function buildInterestRoundupParagraph(events: DailyDigestInterestEvent[]): string {
+  if (events.length === 0) return "";
+  return `Across the last two weeks: ${events
+    .map((event) => buildInterestRoundupItem(event))
+    .join("; ")}.`;
+}
+
+function buildInterestRoundupItem(event: DailyDigestInterestEvent): string {
+  const publishedAt = formatInterestEventDate(event.publishedAt);
+  const interest = normalizeDigestInterest(event.interest) || "Topic";
+  const source = event.source.trim() || "News";
+  return `${publishedAt}: ${interest} - ${event.title} (${source})`;
+}
+
 function formatInterestEventDate(value: string | null): string {
   if (!value) return "Recent";
   const parsed = new Date(value);
@@ -6872,6 +6908,11 @@ function buildCalendarHours(startHour: number, endHour: number): number[] {
   return Array.from({ length: Math.max(1, endHour - startHour) }).map(
     (_, index) => startHour + index,
   );
+}
+
+function getPreferredCalendarDraftHour(startHour: number, endHour: number): number {
+  const currentHour = new Date().getHours();
+  return Math.min(Math.max(currentHour, startHour), Math.max(startHour, endHour - 1));
 }
 
 function eventOccursOnDate(event: Pick<CalendarEvent, "start" | "end">, dateISO: string): boolean {

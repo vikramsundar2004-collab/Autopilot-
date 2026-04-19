@@ -58,6 +58,12 @@ export interface TutorialState {
 
 export const CUSTOMIZATION_STORAGE_KEY = "autopilot-ai-customization";
 export const TUTORIAL_STORAGE_KEY = "autopilot-ai-tutorial";
+export const CALENDAR_RANGE_MIGRATION_KEY = "autopilot-ai-calendar-range-upgraded";
+
+const legacyCalendarDefaults = {
+  startHour: 9,
+  endHour: 18,
+} as const;
 
 export const defaultPageOrder: WorkspacePageKey[] = [
   "daily",
@@ -87,8 +93,8 @@ export const defaultCustomizationSettings: CustomizationSettings = {
     quickCaptureMinutes: 15,
   },
   calendar: {
-    startHour: 9,
-    endHour: 18,
+    startHour: 0,
+    endHour: 24,
     showAgenda: true,
     eventSize: "comfortable",
   },
@@ -106,11 +112,33 @@ export const defaultTutorialState: TutorialState = {
 };
 
 export function loadCustomizationSettings(): CustomizationSettings {
-  return readStorage(CUSTOMIZATION_STORAGE_KEY, sanitizeCustomizationSettings);
+  const settings = readStorage(CUSTOMIZATION_STORAGE_KEY, sanitizeCustomizationSettings);
+
+  if (
+    typeof window !== "undefined" &&
+    window.localStorage.getItem(CALENDAR_RANGE_MIGRATION_KEY) !== "1" &&
+    settings.calendar.startHour === legacyCalendarDefaults.startHour &&
+    settings.calendar.endHour === legacyCalendarDefaults.endHour
+  ) {
+    const migratedSettings = {
+      ...settings,
+      calendar: {
+        ...settings.calendar,
+        startHour: defaultCustomizationSettings.calendar.startHour,
+        endHour: defaultCustomizationSettings.calendar.endHour,
+      },
+    };
+    writeStorage(CUSTOMIZATION_STORAGE_KEY, migratedSettings);
+    markCalendarRangeMigration();
+    return migratedSettings;
+  }
+
+  return settings;
 }
 
 export function saveCustomizationSettings(settings: CustomizationSettings): void {
   writeStorage(CUSTOMIZATION_STORAGE_KEY, sanitizeCustomizationSettings(settings));
+  markCalendarRangeMigration();
 }
 
 export function loadTutorialState(): TutorialState {
@@ -127,11 +155,17 @@ export function sanitizeCustomizationSettings(value: unknown): CustomizationSett
   const productivity = isRecord(candidate.productivity) ? candidate.productivity : {};
   const calendar = isRecord(candidate.calendar) ? candidate.calendar : {};
   const layout = isRecord(candidate.layout) ? candidate.layout : {};
-  const startHour = clampNumber(calendar.startHour, 5, 22, defaultCustomizationSettings.calendar.startHour);
-  const endHour = Math.max(
-    startHour + 1,
-    clampNumber(calendar.endHour, 6, 23, defaultCustomizationSettings.calendar.endHour),
+  const requestedStartHour = clampNumber(
+    calendar.startHour,
+    0,
+    23,
+    defaultCustomizationSettings.calendar.startHour,
   );
+  const endHour = Math.max(
+    requestedStartHour + 1,
+    clampNumber(calendar.endHour, 1, 24, defaultCustomizationSettings.calendar.endHour),
+  );
+  const startHour = Math.min(requestedStartHour, endHour - 1);
 
   return {
     visualTheme: pickString(
@@ -215,6 +249,16 @@ function writeStorage<T>(key: string, value: T): void {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch {
     // Preferences are nice-to-have in the mock app; failed storage should not break the UI.
+  }
+}
+
+function markCalendarRangeMigration(): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(CALENDAR_RANGE_MIGRATION_KEY, "1");
+  } catch {
+    // Calendar range migration is best-effort only.
   }
 }
 

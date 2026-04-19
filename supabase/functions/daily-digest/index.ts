@@ -232,7 +232,7 @@ async function fetchInterestEvents(interests: string[]) {
     interests.map(async (interest) => {
       try {
         const url = new URL("https://news.google.com/rss/search");
-        url.searchParams.set("q", `${interest} when:7d`);
+        url.searchParams.set("q", `${interest} when:14d`);
         url.searchParams.set("hl", "en-US");
         url.searchParams.set("gl", "US");
         url.searchParams.set("ceid", "US:en");
@@ -240,7 +240,7 @@ async function fetchInterestEvents(interests: string[]) {
         if (!response.ok) return [];
         const xml = await response.text();
         return parseNewsItems(xml)
-          .slice(0, 2)
+          .slice(0, 6)
           .map((item) => ({
             interest,
             title: item.title,
@@ -257,13 +257,13 @@ async function fetchInterestEvents(interests: string[]) {
 
   const deduped = new Map<string, any>();
   for (const item of perInterest.flat()) {
-    const key = `${item.interest}:${item.title}`.toLowerCase();
+    const key = `${item.url || item.title}`.toLowerCase();
     if (!deduped.has(key)) deduped.set(key, item);
   }
 
   return Array.from(deduped.values())
     .sort((left, right) => Date.parse(right.publishedAt ?? "") - Date.parse(left.publishedAt ?? ""))
-    .slice(0, 6);
+    .slice(0, 18);
 }
 
 function parseNewsItems(xml: string) {
@@ -365,7 +365,7 @@ async function buildDigestWithAiOrFallback(input: any) {
           {
             role: "system",
             content:
-              "You are Autopilot-AI. Build a concise daily digest from ranked inbox and calendar context. Prioritize only meaningful work for today. Verification, OTP, security-code, sign-in, magic-link, and account-confirmation emails are already handled by the user and must never appear as main priorities. Keep the headline short, the brief executive, the main things practical, and the action list tight.",
+              "You are Autopilot-AI. Build a concise daily digest from ranked inbox and calendar context. Prioritize only meaningful work for today. Verification, OTP, security-code, sign-in, magic-link, and account-confirmation emails are already handled by the user and must never appear as main priorities. The brief must be one or two paragraphs long. The first paragraph should summarize today's work. If interestEvents are present, the final paragraph must cover every materially distinct update represented in those events from the last 14 days in prose, not bullets. Keep the headline short, the main things practical, and the action list tight.",
           },
           {
             role: "user",
@@ -425,11 +425,19 @@ function fallbackDigest(input: any, rankedCandidates: any[]) {
   const mainThings = buildFallbackMainThings(topActions, input.events, input.emails.length);
   return {
     headline: buildFallbackHeadline(topActions),
-    brief: `Ranked ${input.emails.length} synced emails against today's calendar and reduced the day to the next useful decisions.`,
+    brief: buildFallbackBrief(input.emails.length, input.interestEvents, topActions),
     mainThings,
     actionItems: topActions.slice(0, 3),
-    interestEvents: input.interestEvents.slice(0, 4),
+    interestEvents: input.interestEvents.slice(0, 18),
   };
+}
+
+function buildFallbackBrief(emailCount: number, interestEvents: any[], actions: any[]) {
+  const workParagraph = actions[0]
+    ? `Ranked ${emailCount} synced emails against today's calendar and reduced the day to the next useful decisions, starting with ${actions[0].title}.`
+    : `Ranked ${emailCount} synced emails against today's calendar and reduced the day to the next useful decisions.`;
+  const interestParagraph = buildInterestRoundupParagraph(interestEvents);
+  return [workParagraph, interestParagraph].filter(Boolean).join("\n\n");
 }
 
 function buildFallbackMainThings(actions: any[], events: any[], emailCount: number) {
@@ -486,17 +494,28 @@ function normalizeDigest(raw: any, rankedCandidates: any[], fallbackInterestEven
         url: String(item.url ?? ""),
         publishedAt: item.publishedAt ? String(item.publishedAt) : null,
       }))
-    : fallbackInterestEvents.slice(0, 4);
+    : [];
+  const visibleInterestEvents =
+    normalizedInterestEvents.length > 0 ? normalizedInterestEvents : fallbackInterestEvents.slice(0, 18);
+  const fallbackBrief = buildNormalizedFallbackBrief(normalizedActions, visibleInterestEvents);
 
   return {
     headline: limit(String(raw.headline ?? buildFallbackHeadline(normalizedActions)), 160),
-    brief: limit(String(raw.brief ?? ""), 420),
+    brief: limit(String(raw.brief ?? "").trim() || fallbackBrief, 1600),
     mainThings: Array.isArray(raw.mainThings)
       ? raw.mainThings.map((item: any) => limit(String(item), 220)).slice(0, 5)
       : buildFallbackMainThings(normalizedActions, [], normalizedActions.length),
     actionItems: normalizedActions.slice(0, 5),
-    interestEvents: normalizedInterestEvents.slice(0, 6),
+    interestEvents: visibleInterestEvents.slice(0, 18),
   };
+}
+
+function buildNormalizedFallbackBrief(actions: any[], interestEvents: any[]) {
+  const workParagraph = actions[0]
+    ? `Start with ${actions[0].title} and keep the next ranked actions moving before adding more work.`
+    : "Review the ranked inbox work first and keep the day contained.";
+  const interestParagraph = buildInterestRoundupParagraph(interestEvents);
+  return [workParagraph, interestParagraph].filter(Boolean).join("\n\n");
 }
 
 function emailToAction(email: any, date: string) {
@@ -551,6 +570,26 @@ function buildSourceUrl(email: any) {
   if (!email || email.provider !== "google") return null;
   const threadId = String(email.threadId ?? email.providerMessageId ?? "").trim();
   return threadId ? `https://mail.google.com/mail/u/0/#inbox/${encodeURIComponent(threadId)}` : null;
+}
+
+function buildInterestRoundupParagraph(events: any[]) {
+  if (!Array.isArray(events) || events.length === 0) return "";
+  return `Across the last two weeks: ${events.map((event) => formatInterestRoundupItem(event)).join("; ")}.`;
+}
+
+function formatInterestRoundupItem(event: any) {
+  const publishedAt = formatInterestDigestDate(event.publishedAt);
+  const interest = limit(String(event.interest ?? "Topic"), 40);
+  const title = limit(String(event.title ?? "Recent event"), 180);
+  const source = limit(String(event.source ?? "News"), 60);
+  return `${publishedAt}: ${interest} - ${title} (${source})`;
+}
+
+function formatInterestDigestDate(value: string | null | undefined) {
+  if (!value) return "Recent";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Recent";
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 function priorityWeight(priority: Priority): number {
