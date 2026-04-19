@@ -128,7 +128,7 @@ export async function syncGoogleWorkspace(
 
   const date = request.date ?? new Date().toISOString().slice(0, 10);
   const emails = Array.isArray(data?.emailRows)
-    ? mapEmailRowsToMessages(data.emailRows as EmailMessageRow[], date)
+    ? mapEmailRowsToMessages(data.emailRows as EmailMessageRow[], date, { filterActionable: false })
     : [];
   const calendarEvents = Array.isArray(data?.calendarRows)
     ? mapCalendarRowsToEvents(data.calendarRows as CalendarEventRow[])

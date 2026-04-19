@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
   const date = typeof body.date === "string" ? body.date : new Date().toISOString().slice(0, 10);
   const dayStartIso = typeof body.dayStartIso === "string" ? body.dayStartIso : null;
   const dayEndIso = typeof body.dayEndIso === "string" ? body.dayEndIso : null;
-  const maxEmails = clamp(body.maxEmails, 1, 200, 100);
+  const maxEmails = clamp(body.maxEmails, 1, 200, 200);
   const maxEvents = clamp(body.maxEvents, 1, 100, 50);
   const bodyAccessToken = typeof body.providerAccessToken === "string" ? body.providerAccessToken : "";
   const bodyRefreshToken = typeof body.providerRefreshToken === "string" ? body.providerRefreshToken : "";

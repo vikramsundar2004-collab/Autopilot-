@@ -71,6 +71,8 @@ export interface PlannerApiResult {
   actionCount?: number;
   scheduleBlockCount?: number;
   approvalCount?: number;
+  blockedEmailCount?: number;
+  verificationEmailCount?: number;
   persisted?: boolean;
   persistenceError?: string;
   actionItems: PlannerApiAction[];
@@ -162,6 +164,8 @@ export async function runDailyPlanner(
     actionCount: persisted?.actionCount,
     scheduleBlockCount: persisted?.scheduleBlockCount,
     approvalCount: persisted?.approvalCount,
+    blockedEmailCount: Number(data?.blockedEmailCount ?? 0),
+    verificationEmailCount: Number(data?.verificationEmailCount ?? 0),
     persisted: persistedOk,
     persistenceError,
     actionItems,

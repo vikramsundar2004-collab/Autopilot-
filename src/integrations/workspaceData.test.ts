@@ -91,6 +91,32 @@ describe("workspaceData", () => {
     expect(messages).toHaveLength(0);
   });
 
+  it("can keep non-actionable inbox rows visible when the UI needs the full synced mailbox", () => {
+    const messages = mapEmailRowsToMessages(
+      [
+        {
+          id: "row-3b",
+          provider: "google",
+          provider_message_id: "message-3b",
+          thread_id: "thread-3b",
+          from_name: "Ops Digest",
+          from_email: "digest@company.com",
+          subject: "FYI: system status weekly digest",
+          snippet: "No action needed. Sharing the weekly digest for visibility.",
+          body_preview: null,
+          received_at: "2026-04-17T10:00:00.000Z",
+          labels: [],
+          importance: "normal",
+        },
+      ],
+      "2026-04-17",
+      { filterActionable: false },
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].subject).toContain("FYI");
+  });
+
   it("keeps explicit requests actionable even when they are phrased as follow-ups", () => {
     expect(
       isActionableEmailMessage({

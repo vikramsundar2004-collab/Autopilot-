@@ -53,6 +53,10 @@ export interface LoadWorkspaceDataOptions {
   eventLimit?: number;
 }
 
+export interface MapEmailRowsToMessagesOptions {
+  filterActionable?: boolean;
+}
+
 const defaultEmailLimit = 200;
 const defaultEventLimit = 50;
 
@@ -109,7 +113,7 @@ export async function loadWorkspaceData(
     );
   }
 
-  const emails = mapEmailRowsToMessages(emailsResult.data ?? [], date);
+  const emails = mapEmailRowsToMessages(emailsResult.data ?? [], date, { filterActionable: false });
   const calendarEvents = mapCalendarRowsToEvents(calendarResult.data ?? []);
   if (emails.length === 0 && calendarEvents.length === 0) {
     return emptyWorkspace(
@@ -152,10 +156,12 @@ export function localDateFromIso(isoDate: string): string {
 export function mapEmailRowsToMessages(
   rows: EmailMessageRow[],
   planningDate: string,
+  options: MapEmailRowsToMessagesOptions = {},
 ): EmailMessage[] {
-  return rows
-    .map((row) => mapEmailRowToMessage(row, planningDate))
-    .filter((message) => isActionableEmailMessage(message));
+  const messages = rows.map((row) => mapEmailRowToMessage(row, planningDate));
+  return options.filterActionable === false
+    ? messages
+    : messages.filter((message) => isActionableEmailMessage(message));
 }
 
 export function mapCalendarRowsToEvents(rows: CalendarEventRow[]): CalendarEvent[] {

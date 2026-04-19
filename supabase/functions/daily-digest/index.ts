@@ -203,8 +203,18 @@ function isVerificationEmail(email: any) {
     .join(" ")
     .toLowerCase();
 
-  return /\b(verification|verify your email|verify your account|confirm your email|confirm your account|sign-in code|signin code|security code|one-time passcode|one-time password|otp|two-factor|2fa|magic link|login code|verification code)\b/.test(
-    text,
+  return (
+    /\b(?:verification|authentication|security|access|login|sign[\s-]?in)\s+(?:code|passcode|password|otp|token|link)\b/.test(
+      text,
+    ) ||
+    /\b(?:one[\s-]?time|single[\s-]?use)\s+(?:code|passcode|password)\b/.test(text) ||
+    /\b(?:two[\s-]?factor|2fa|otp|magic link|device verification|email confirmation|account confirmation)\b/.test(
+      text,
+    ) ||
+    /\b(?:verify|confirm|approve)(?:\s+\w+){0,4}\s+(?:email|account|identity|login|sign[\s-]?in|device)\b/.test(
+      text,
+    ) ||
+    /\bsudo email verification code\b/.test(text)
   );
 }
 

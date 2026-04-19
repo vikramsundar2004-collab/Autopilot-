@@ -234,7 +234,7 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
     expect(
-      screen.getByText("Scroll the inbox list and click any email to read it in the right pane."),
+      screen.getByText("Scroll the inbox list, skim sender, subject, snippet, and date in one row, then open any thread in the right pane."),
     ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {

@@ -1,4 +1,5 @@
 import type { ActionItem, CalendarEvent, CalendarEventType, EmailPriority, TaskCategory, TaskStatus } from "../types";
+import { isVerificationActionLike } from "../emailSignals";
 import { supabase } from "./supabaseClient";
 
 interface PlanRunRow {
@@ -137,7 +138,7 @@ export async function loadLatestPlannerOutput(
     };
   }
 
-  const actionItems = (actionRows ?? []).map(mapActionItemRow);
+  const actionItems = (actionRows ?? []).map(mapActionItemRow).filter((item) => !isVerificationActionLike(item));
   const scheduleBlocks = (blockRows ?? []).map(mapScheduleBlockRow);
   const blockedEmailCount = Number(run.input_counts?.blockedEmails ?? 0);
   const messageParts = [

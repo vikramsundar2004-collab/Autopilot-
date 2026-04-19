@@ -30,6 +30,7 @@ import {
   type DraftTheme,
   type EmailReplyDraft,
 } from "./emailDrafts";
+import { isVerificationActionLike, isVerificationEmailLike } from "./emailSignals";
 import {
   buildBehaviorActions,
   buildShareStateUrl,
@@ -105,6 +106,7 @@ import {
 import {
   buildLocalDayRange,
   getLocalDateISO,
+  isActionableEmailMessage,
   loadWorkspaceData,
   localDateFromIso,
   type WorkspaceDataSource,
@@ -1032,12 +1034,16 @@ function App() {
   const [isEnterpriseLoading, setIsEnterpriseLoading] = useState(false);
   const isGoogleConnected = googleConnection.connected;
 
-  const aiEligibleEmails = useMemo(
+  const rankableEmails = useMemo(
     () =>
       filterAiBlockedEmails(workspaceEmails, aiSenderBlocks).filter(
         (email) => !isVerificationEmail(email),
       ),
     [aiSenderBlocks, workspaceEmails],
+  );
+  const aiEligibleEmails = useMemo(
+    () => rankableEmails.filter((email) => isActionableEmailMessage(email)),
+    [rankableEmails],
   );
   const replyDraftBlueprints = useMemo(
     () => deriveReplyDrafts(aiEligibleEmails, draftTheme),
@@ -1068,7 +1074,10 @@ function App() {
     [apiReplyDrafts, draftTheme, replyDraftEdits, selectedInboxEmail],
   );
   const visiblePlannerActionItems = useMemo(
-    () => filterAiBlockedActions(plannerActionItems, aiSenderBlocks),
+    () =>
+      filterAiBlockedActions(plannerActionItems, aiSenderBlocks).filter(
+        (item) => !isVerificationActionLike(item),
+      ),
     [aiSenderBlocks, plannerActionItems],
   );
   const visibleManualCalendarEvents = useMemo(
@@ -1156,26 +1165,26 @@ function App() {
     () =>
       Math.max(
         0,
-        workspaceEmails.length - aiEligibleEmails.length - verificationEmailCount,
+        workspaceEmails.length - rankableEmails.length - verificationEmailCount,
       ),
-    [aiEligibleEmails.length, verificationEmailCount, workspaceEmails.length],
+    [rankableEmails.length, verificationEmailCount, workspaceEmails.length],
   );
   const localDailyDigest = useMemo(
     () =>
       buildLocalDailyDigest({
         blockedEmailCount,
         calendarEvents,
-        emails: aiEligibleEmails,
+        emails: rankableEmails,
         planningDate,
         tasks: orderedTasks,
         verificationEmailCount,
       }),
     [
-      aiEligibleEmails,
       blockedEmailCount,
       calendarEvents,
       orderedTasks,
       planningDate,
+      rankableEmails,
       verificationEmailCount,
     ],
   );
@@ -2149,7 +2158,7 @@ function App() {
       date: planningDate,
       timezone: "America/Los_Angeles",
       planningMode: planMode,
-      emails: aiEligibleEmails.map(buildPlannerEmailPayload),
+      emails: workspaceEmails.map(buildPlannerEmailPayload),
       calendarEvents: calendarEvents
         .filter((event) => event.provider !== "planner")
         .map(buildPlannerCalendarPayload),
@@ -2162,19 +2171,20 @@ function App() {
       return;
     }
 
+    const rankedActionItems = result.actionItems.filter((item) => !isVerificationActionLike(item));
     setProductivityNotice(
       [
         result.message,
-        `Ranked ${aiEligibleEmails.length} eligible emails into ${result.actionItems.length} action items.`,
+        `Ranked ${rankableEmails.length} planner-eligible emails from ${workspaceEmails.length} synced messages into ${rankedActionItems.length} action items.`,
         `${result.actionCount ?? 0} actions, ${result.scheduleBlockCount ?? 0} schedule blocks, ${result.approvalCount ?? 0} approvals.`,
-        buildTopActionSummary(result.actionItems),
+        buildTopActionSummary(rankedActionItems),
       ]
         .filter(Boolean)
         .join(" "),
     );
     const emailById = new Map(workspaceEmails.map((email) => [email.id, email]));
     setPlannerActionItems(
-      result.actionItems.map((item, index) =>
+      rankedActionItems.map((item, index) =>
         mapPlannerActionToTask(item, item.sourceMessageId ? emailById.get(item.sourceMessageId) : undefined, index),
       ),
     );
@@ -2184,8 +2194,8 @@ function App() {
     setPlannerNotice(
       [
         result.message,
-        `Ranked ${aiEligibleEmails.length} eligible emails.`,
-        buildTopActionSummary(result.actionItems),
+        `Ranked ${rankableEmails.length} planner-eligible emails from ${workspaceEmails.length} synced messages.`,
+        buildTopActionSummary(rankedActionItems),
       ]
         .filter(Boolean)
         .join(" "),
@@ -2228,6 +2238,7 @@ function App() {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
       organizationId: activeEnterpriseId ?? undefined,
       interests: digestInterests,
+      emails: workspaceEmails.map(buildPlannerEmailPayload),
       calendarEvents:
         calendarEvents.length > 0
           ? calendarEvents
@@ -2750,7 +2761,10 @@ function App() {
                 <p>{dailyBrief}</p>
                 <ol className="command-band-list">
                   {visibleDailyDigest.actionItems.slice(0, dailyDigestActionCount).map((item, index) => (
-                    <li key={`${item.sourceMessageId ?? item.title}-${index}`}>{item.title}</li>
+                    <li key={`${item.sourceMessageId ?? item.title}-${index}`}>
+                      <span className="ordered-step">{index + 1}.</span>
+                      <span>{item.title}</span>
+                    </li>
                   ))}
                 </ol>
               </div>
@@ -2838,9 +2852,11 @@ function App() {
               draftTheme={draftTheme}
               emails={workspaceEmails}
               notice={workspaceNotice}
+              plannerRankableCount={rankableEmails.length}
               promotionalEmailCount={promotionalEmailCount}
               selectedDraft={selectedInboxDraft}
               selectedEmail={selectedInboxEmail}
+              verificationEmailCount={verificationEmailCount}
               onBlockSender={blockSenderFromAi}
               onCopyDraft={copyReplyDraft}
               onDraftThemeChange={setDraftTheme}
@@ -2878,7 +2894,7 @@ function App() {
             <WorkspaceSnapshotPanel
               calendarEvents={calendarEvents}
               blockedSenders={aiSenderBlocks}
-              filteredEmailCount={aiEligibleEmails.length}
+              filteredEmailCount={rankableEmails.length}
               isLoading={isWorkspaceLoading}
               notice={workspaceNotice}
               onBlockSender={blockSenderFromAi}
@@ -3522,7 +3538,7 @@ function WorkspaceSnapshotPanel({
         </article>
         <article>
           <strong>{filteredEmailCount}</strong>
-          <p>emails currently eligible for AI after private sender blocks</p>
+          <p>emails currently eligible for AI after verification and privacy filters</p>
         </article>
         <article>
           <strong>{calendarEvents.length}</strong>
@@ -3860,9 +3876,11 @@ function InboxPage({
   draftTheme,
   emails,
   notice,
+  plannerRankableCount,
   promotionalEmailCount,
   selectedDraft,
   selectedEmail,
+  verificationEmailCount,
   onBlockSender,
   onCopyDraft,
   onDraftThemeChange,
@@ -3876,9 +3894,11 @@ function InboxPage({
   draftTheme: DraftTheme;
   emails: EmailMessage[];
   notice: string;
+  plannerRankableCount: number;
   promotionalEmailCount: number;
   selectedDraft: EmailReplyDraft | null;
   selectedEmail: EmailMessage | null;
+  verificationEmailCount: number;
   onBlockSender: (email: EmailMessage) => Promise<void>;
   onCopyDraft: (draft: EmailReplyDraft) => void;
   onDraftThemeChange: (theme: DraftTheme) => void;
@@ -3913,7 +3933,15 @@ function InboxPage({
         <div className="setup-grid compact">
           <article>
             <strong>{emails.length}</strong>
-            <p>messages visible in the inbox reader</p>
+            <p>messages visible in the Gmail-style inbox reader</p>
+          </article>
+          <article>
+            <strong>{plannerRankableCount}</strong>
+            <p>messages still eligible for ranking after verification and privacy filters</p>
+          </article>
+          <article>
+            <strong>{verificationEmailCount}</strong>
+            <p>verification or login threads ignored by AI ranking</p>
           </article>
           <article>
             <strong>{blockedSenders.length}</strong>
@@ -3921,7 +3949,7 @@ function InboxPage({
           </article>
           <article>
             <strong>{promotionalEmailCount}</strong>
-            <p>promotional threads filtered from the curated draft workspace</p>
+            <p>promotional threads still visible in the inbox but deprioritized for drafting</p>
           </article>
           <article>
             <strong>{draftTheme}</strong>
@@ -3957,8 +3985,22 @@ function InboxPage({
             <span className="status-pill ready">{emails.length} synced</span>
           </div>
           <p className="inline-help">
-            Scroll the inbox list and click any email to read it in the right pane.
+            Scroll the inbox list, skim sender, subject, snippet, and date in one row, then open any thread in the right pane.
           </p>
+          <div className="gmail-toolbar" aria-label="Inbox list summary">
+            <div className="gmail-toolbar-chips">
+              <span className="mini-filter active">{emails.length} synced</span>
+              <span className="mini-filter">{plannerRankableCount} rankable</span>
+              <span className="mini-filter">{verificationEmailCount} verification ignored</span>
+            </div>
+            <span className="gmail-toolbar-meta">Planner reviews the full synced inbox, not just the highlighted rows.</span>
+          </div>
+          <div className="inbox-table-header" aria-hidden="true">
+            <span />
+            <span>Sender</span>
+            <span>Subject</span>
+            <span>Date</span>
+          </div>
           <div className="inbox-list" role="list" aria-label="Inbox message list">
             {emails.length > 0 ? (
               emails.map((email) => {
@@ -3973,24 +4015,27 @@ function InboxPage({
                     onClick={() => onEmailSelect(email.id)}
                     type="button"
                   >
-                    <div className="inbox-message-topline">
+                    <div className="inbox-row-select" aria-hidden="true" />
+                    <div className="inbox-row-sender">
                       <strong>{email.from}</strong>
+                    </div>
+                    <div className="inbox-row-subjectline">
+                      <span className="inbox-row-subject">{email.subject}</span>
+                      <span className="inbox-row-preview">{email.preview}</span>
+                      <div className="label-row">
+                        <span className={`priority ${email.priority}`}>{email.priority}</span>
+                        {isBlocked ? <span className="mini-filter">blocked from AI</span> : null}
+                        {verificationEmail ? <span className="mini-filter">verification</span> : null}
+                        {isAdLikeEmail(email) ? <span className="mini-filter">promo-like</span> : null}
+                        {email.labels.slice(0, 2).map((label) => (
+                          <span className="mini-filter" key={`${email.id}-${label}`}>
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="inbox-row-date">
                       <span>{formatInboxTimestamp(email.receivedAt)}</span>
-                    </div>
-                    <div className="inbox-message-subject">
-                      <span>{email.subject}</span>
-                      <span className={`priority ${email.priority}`}>{email.priority}</span>
-                    </div>
-                    <p>{email.preview}</p>
-                    <div className="label-row">
-                      {isBlocked ? <span className="mini-filter">blocked from AI</span> : null}
-                      {verificationEmail ? <span className="mini-filter">verification</span> : null}
-                      {isAdLikeEmail(email) ? <span className="mini-filter">promo-like</span> : null}
-                      {email.labels.slice(0, 2).map((label) => (
-                        <span className="mini-filter" key={`${email.id}-${label}`}>
-                          {label}
-                        </span>
-                      ))}
                     </div>
                   </button>
                 );
@@ -5506,9 +5551,10 @@ function DailyDigestPanel({
           <div className="digest-block">
             <h3>Action items</h3>
             <div className="digest-action-list">
-              {digest.actionItems.map((item) => (
+              {digest.actionItems.map((item, index) => (
                 <article className="digest-action-card" key={`${item.sourceMessageId ?? item.title}-${item.title}`}>
                   <div className="digest-action-topline">
+                    <span className="ordered-step">{index + 1}.</span>
                     <span className={`priority ${item.priority}`}>{item.priority}</span>
                     {item.sourceUrl ? (
                       <a href={item.sourceUrl} rel="noreferrer" target="_blank">
@@ -6558,19 +6604,7 @@ function buildTopActionSummary(
 function isVerificationEmail(
   email: Pick<EmailMessage, "subject" | "preview" | "labels" | "from" | "senderEmail">,
 ): boolean {
-  const searchableText = [
-    email.subject,
-    email.preview,
-    email.from,
-    email.senderEmail ?? "",
-    ...email.labels,
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  return /\b(verification|verify your email|verify your account|confirm your email|confirm your account|sign-in code|signin code|security code|one-time passcode|one-time password|otp|two-factor|2fa|magic link|login code|verification code)\b/.test(
-    searchableText,
-  );
+  return isVerificationEmailLike(email);
 }
 
 function normalizeDigestInterest(value: string): string {
