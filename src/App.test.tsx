@@ -10,55 +10,6 @@ describe("App", () => {
     window.history.replaceState(null, "", "/");
   });
 
-  it("runs idea-improver behaviors as usable actions", () => {
-    render(<App />);
-
-    expect(screen.getAllByText("Autopilot-AI").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
-    expect(screen.getByRole("heading", { name: "Action lab" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("Apply recommendation"));
-    expect(screen.getByText(/Recommendations for Templates is now enabled/)).toBeInTheDocument();
-    expect(screen.getAllByText("Recommendations for Templates").length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByLabelText("Work offline and queue changes"));
-    fireEvent.click(screen.getAllByText("Cross-device")[0]);
-    fireEvent.click(screen.getAllByText("Use this")[0]);
-    expect(screen.getByText("Feature enabled")).toBeInTheDocument();
-    expect(screen.getAllByText(/queued/).length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByText("Sync queued actions"));
-    expect(screen.getByText(/Queued actions synced across devices/)).toBeInTheDocument();
-  });
-
-  it("supports batch apply, undo, inline edit confirmation, share links, and presets", () => {
-    render(<App />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
-    fireEvent.click(screen.getByLabelText("Recommendations for Templates"));
-    fireEvent.click(screen.getByLabelText("Event-driven for Templates"));
-    fireEvent.click(screen.getByText("Apply selected"));
-    expect(screen.getByText(/2 features enabled with undo available/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("Undo last batch"));
-    expect(screen.getByText("2 actions undone.")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Inline instruction editor"), {
-      target: { value: "Preview, verify, and confirm the user's next best action." },
-    });
-    fireEvent.click(screen.getByText("Review edit"));
-    fireEvent.click(screen.getByText("Confirm update"));
-    expect(screen.getByText("Inline edit confirmed with safeguard review.")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("Create state link"));
-    expect((screen.getByLabelText("Shareable state link") as HTMLInputElement).value).toContain(
-      "#state=",
-    );
-
-    fireEvent.click(screen.getByText("Save current preset"));
-    expect(screen.getAllByText(/Customer reply sprint/).length).toBeGreaterThan(0);
-  });
-
   it("adds productivity controls for capture, planning modes, focus sprints, and API planning", async () => {
     render(<App />);
 
@@ -151,7 +102,7 @@ describe("App", () => {
   it("creates handoffs that move work into waiting with a reusable share link", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
     const taskSelect = screen.getByLabelText("Handoff task") as HTMLSelectElement;
     const selectedTaskTitle = taskSelect.options[taskSelect.selectedIndex]?.text ?? "";
     fireEvent.change(screen.getByLabelText("Handoff owner"), {
@@ -503,10 +454,6 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: "Edit reply drafts before they go back into Gmail" }),
     ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
-    expect(screen.getByRole("heading", { name: "Action lab" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Connect the work sources" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Privacy" }));
     expect(screen.getByRole("heading", { name: "Data guardrails" })).toBeInTheDocument();

@@ -11,7 +11,7 @@
     "ios:open": "cap open ios",
     "ios:copy": "npm run build:ios && cap copy ios",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "vitest run",
+    "test": "node scripts/run-vitest.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

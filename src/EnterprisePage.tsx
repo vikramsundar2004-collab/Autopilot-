@@ -32,9 +32,9 @@ interface EnterprisePageProps {
   onJoinKeyChange: (value: string) => void;
   onMarkAssignmentDone: (assignmentId: string) => void;
   onMessageDraftChange: (value: string) => void;
-  onOpenActions: () => void;
   onOpenCalendar: () => void;
   onOpenDrafts: () => void;
+  onOpenProductivity: () => void;
   onOpenSources: () => void;
   onSelectOrganization: (organizationId: string) => void;
   onSendMessage: (event: FormEvent<HTMLFormElement>) => void;
@@ -60,9 +60,9 @@ export function EnterprisePage({
   onJoinKeyChange,
   onMarkAssignmentDone,
   onMessageDraftChange,
-  onOpenActions,
   onOpenCalendar,
   onOpenDrafts,
+  onOpenProductivity,
   onOpenSources,
   onSelectOrganization,
   onSendMessage,
@@ -396,8 +396,8 @@ export function EnterprisePage({
               <button className="secondary-action" onClick={onOpenDrafts} type="button">
                 Open drafts
               </button>
-              <button className="secondary-action" onClick={onOpenActions} type="button">
-                Open action lab
+              <button className="secondary-action" onClick={onOpenProductivity} type="button">
+                Open productivity
               </button>
               <button className="secondary-action" onClick={onOpenCalendar} type="button">
                 Open calendar

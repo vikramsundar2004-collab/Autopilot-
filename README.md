@@ -43,7 +43,7 @@ Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md), [docs/SUPABASE_SETUP.md](docs
 ## What Is In V1
 
 - Email-derived action list with priority, confidence, source, and risk signals.
-- Persistent sidebar navigation with separate pages for Daily plan, Productivity, Sources, Drafts, Actions, Customize, Calendar, Privacy, and the feature overview page.
+- Persistent sidebar navigation with separate pages for Daily plan, Productivity, Sources, Drafts, Customize, Calendar, Privacy, and the feature overview page.
 - Full Google Calendar-style day view with a week strip, larger hourly grid, event blocks, meetings, and protected focus windows.
 - Productivity cockpit for focus sprints, quick-captured tasks, and planning modes for impact, quick wins, or deep work.
 - Customize panel for visual theme, density, visible workspace sections, productivity defaults, and calendar preferences.
@@ -52,7 +52,7 @@ Read [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md), [docs/SUPABASE_SETUP.md](docs
 - Triage filters for all tasks, urgent tasks, waiting tasks, and done tasks.
 - Integration readiness for Google, Slack, WhatsApp, Microsoft 365, and Notion.
 - Shift-style workspace customization for sidebar style, pinned pages, and moveable page order.
-- An action lab covering recommendations, cross-device continuity, event triggers, shareable state, accessibility, multi-select actions, contextual hints, role-aware defaults, inline editing, and saved presets.
+- Delegation and handoff controls in Productivity, with reusable share links and waiting-state task tracking.
 - Feature overview page covering executive briefs, work graph, AI citations, protected focus scheduling, delegation, approval-gated automation, security controls, personalization, and ROI reporting.
 - API-backed editable reply drafts for important non-promotional email threads, with direct, warm, and executive themes.
 - Source explainability, privacy boundary messaging, effort/impact scoring, and a recovery plan for missed work are built into the daily plan.

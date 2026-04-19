@@ -33,24 +33,6 @@ import {
 } from "./emailDrafts";
 import { isVerificationActionLike, isVerificationEmailLike } from "./emailSignals";
 import {
-  buildBehaviorActions,
-  buildShareStateUrl,
-  getRoleRecommendation,
-  roleLabels,
-  surfaceFlows,
-  surfaceOrder,
-  type BehaviorAction,
-  type UserRole,
-} from "./improvementBehaviors";
-import {
-  capabilityLabels,
-  capabilityOrder,
-  themeLabels,
-  type ImprovementCapability,
-  type ImprovementMode,
-  type ImprovementTheme,
-} from "./improvements";
-import {
   buildDailyPlan,
   deriveActionItems,
   formatDueLabel,
@@ -150,7 +132,6 @@ import type {
 } from "./types";
 
 type TaskFilter = "all" | "urgent" | "waiting" | "done";
-type ImprovementFilter = "all" | ImprovementCapability;
 type AssistantMessageKind = "info" | "success" | "warning";
 
 interface AssistantMessage {
@@ -175,7 +156,6 @@ const appPages = [
   "productivity",
   "sources",
   "drafts",
-  "actions",
   "customize",
   "calendar",
   "privacy",
@@ -207,7 +187,6 @@ const pageLabels: Record<AppPage, string> = {
   productivity: "Productivity",
   sources: "Sources",
   drafts: "Drafts",
-  actions: "Actions",
   customize: "Customize",
   calendar: "Calendar",
   privacy: "Privacy",
@@ -233,7 +212,7 @@ const premiumFeatures = [
   {
     title: "AI action engine with citations",
     outcome: "Every task keeps the source thread, confidence, risk, and the reason it was recommended.",
-    surface: "Actions",
+    surface: "Daily plan",
   },
   {
     title: "Protected focus scheduling",
@@ -253,7 +232,7 @@ const premiumFeatures = [
   {
     title: "Approval-gated automation",
     outcome: "Reply approvals, task changes, snoozes, and syncs are staged before anything touches live accounts.",
-    surface: "Actions",
+    surface: "Productivity",
   },
   {
     title: "Calendar operations view",
@@ -408,8 +387,8 @@ const tutorialSteps = [
     body: "The integration cards explain which tools can connect now and which need backend support later.",
   },
   {
-    title: "Try the action lab",
-    body: "The action lab lets you test apply, undo, snooze, share, and preset flows before live data is connected.",
+    title: "Delegate without losing the thread",
+    body: "Use the productivity page to hand work to another owner, keep the share link, and move the task into waiting.",
   },
   {
     title: "Open the full calendar",
@@ -625,25 +604,6 @@ const milestoneBlueprints = [
     target: 1,
   },
 ] as const;
-
-interface AppliedBehavior {
-  id: string;
-  label: string;
-  detail: string;
-  theme: ImprovementTheme;
-  capability: ImprovementCapability;
-  synced: boolean;
-  createdAt: string;
-}
-
-interface SavedPreset {
-  id: string;
-  name: string;
-  theme: ImprovementTheme;
-  mode: ImprovementMode;
-  role: UserRole;
-  instruction: string;
-}
 
 interface CalendarDraft {
   id?: string;
@@ -2881,7 +2841,7 @@ function App() {
             <PageHeader
               eyebrow="Productivity"
               title="Plan the next block of work"
-              body="Capture loose work, apply reusable workflow templates, switch planning modes, and protect the next focus sprint without mixing it into the task list."
+              body="Capture loose work, apply reusable workflow templates, switch planning modes, protect the next focus sprint, and delegate work that needs another owner."
             />
             {renderProductivityPanel()}
             {settings.sections.focusWindows ? (
@@ -2897,6 +2857,21 @@ function App() {
                 onCustomize={() => navigate("customize")}
               />
             )}
+            <TeamHandoffRoom
+              channel={handoffChannel}
+              handoffs={teamHandoffs}
+              notice={handoffNotice}
+              note={handoffNote}
+              owner={handoffOwner}
+              selectedTaskId={handoffTaskId}
+              tasks={openHandoffTasks}
+              onChannelChange={setHandoffChannel}
+              onCreate={createTeamHandoff}
+              onNoteChange={setHandoffNote}
+              onOwnerChange={setHandoffOwner}
+              onReclaim={reclaimHandoff}
+              onTaskChange={setHandoffTaskId}
+            />
           </>
         );
       case "inbox":
@@ -2992,40 +2967,6 @@ function App() {
               onResetDraft={resetReplyDraftBody}
               onUpdateDraft={updateReplyDraftBody}
             />
-          </>
-        );
-      case "actions":
-        return (
-          <>
-            <PageHeader
-              eyebrow="Actions"
-              title="Turn recommendations into controlled changes"
-              body="Apply, undo, queue, snooze, share, save AI action presets, and hand work off cleanly before connecting live inbox data."
-            />
-            <TeamHandoffRoom
-              channel={handoffChannel}
-              handoffs={teamHandoffs}
-              notice={handoffNotice}
-              note={handoffNote}
-              owner={handoffOwner}
-              selectedTaskId={handoffTaskId}
-              tasks={openHandoffTasks}
-              onChannelChange={setHandoffChannel}
-              onCreate={createTeamHandoff}
-              onNoteChange={setHandoffNote}
-              onOwnerChange={setHandoffOwner}
-              onReclaim={reclaimHandoff}
-              onTaskChange={setHandoffTaskId}
-            />
-            {settings.sections.actionLab ? (
-              <ImprovementStudio />
-            ) : (
-              <HiddenSectionNotice
-                title="Action lab is hidden"
-                body="Turn it back on in Customize when you want to test automations and approval flows."
-                onCustomize={() => navigate("customize")}
-              />
-            )}
           </>
         );
       case "customize":
@@ -3124,9 +3065,9 @@ function App() {
             onJoinKeyChange={setEnterpriseJoinKey}
             onMarkAssignmentDone={markEnterpriseAssignmentComplete}
             onMessageDraftChange={setEnterpriseMessageDraft}
-            onOpenActions={() => navigate("actions")}
             onOpenDrafts={() => navigate("drafts")}
             onOpenCalendar={() => navigate("calendar")}
+            onOpenProductivity={() => navigate("productivity")}
             onOpenSources={() => navigate("sources")}
             onSelectOrganization={selectEnterpriseWorkspace}
             onSendMessage={sendEnterpriseChatMessage}
@@ -3303,7 +3244,6 @@ function Sidebar({
     productivity: <MailOpen size={18} aria-hidden="true" />,
     sources: <Link2 size={18} aria-hidden="true" />,
     drafts: <MailOpen size={18} aria-hidden="true" />,
-    actions: <SlidersHorizontal size={18} aria-hidden="true" />,
     customize: <Settings2 size={18} aria-hidden="true" />,
     calendar: <CalendarDays size={18} aria-hidden="true" />,
     privacy: <ShieldCheck size={18} aria-hidden="true" />,
@@ -4464,11 +4404,6 @@ function CustomizationPanel({
             onChange={(checked) => updateSections({ integrations: checked })}
           />
           <ToggleField
-            checked={settings.sections.actionLab}
-            label="Show action lab"
-            onChange={(checked) => updateSections({ actionLab: checked })}
-          />
-          <ToggleField
             checked={settings.sections.focusWindows}
             label="Show focus windows"
             onChange={(checked) => updateSections({ focusWindows: checked })}
@@ -4826,426 +4761,6 @@ function MiniTaskStack({ title, tasks }: { title: string; tasks: ActionItem[] })
         </span>
       ))}
     </div>
-  );
-}
-
-function ImprovementStudio() {
-  const [activeSurface, setActiveSurface] = useState<ImprovementTheme>("templates");
-  const [mode, setMode] = useState<ImprovementMode>("personalized");
-  const [role, setRole] = useState<UserRole>("operator");
-  const [activeFilter, setActiveFilter] = useState<ImprovementFilter>("all");
-  const [offlineMode, setOfflineMode] = useState(false);
-  const [selectedActionIds, setSelectedActionIds] = useState<Set<string>>(new Set());
-  const [enabledActionIds, setEnabledActionIds] = useState<Set<string>>(new Set());
-  const [appliedBehaviors, setAppliedBehaviors] = useState<AppliedBehavior[]>([]);
-  const [syncQueue, setSyncQueue] = useState<AppliedBehavior[]>([]);
-  const [lastBatch, setLastBatch] = useState<AppliedBehavior[]>([]);
-  const [savedPresets, setSavedPresets] = useState<SavedPreset[]>([]);
-  const [shareUrl, setShareUrl] = useState("");
-  const [snoozedUntil, setSnoozedUntil] = useState("");
-  const [showGuidance, setShowGuidance] = useState(true);
-  const [draftInstruction, setDraftInstruction] = useState(surfaceFlows.templates.guidedStep);
-  const [confirmedInstruction, setConfirmedInstruction] = useState(surfaceFlows.templates.guidedStep);
-  const [pendingInstruction, setPendingInstruction] = useState("");
-  const [liveMessage, setLiveMessage] = useState("Autopilot action lab is ready.");
-
-  const flow = surfaceFlows[activeSurface];
-  const behaviorActions = useMemo(
-    () => buildBehaviorActions(activeSurface, mode, role),
-    [activeSurface, mode, role],
-  );
-  const visibleActions = useMemo(
-    () =>
-      activeFilter === "all"
-        ? behaviorActions
-        : behaviorActions.filter((action) => action.capability === activeFilter),
-    [activeFilter, behaviorActions],
-  );
-  const recommendationAction =
-    behaviorActions.find((action) => action.capability === "recommendation") ?? behaviorActions[0];
-
-  useEffect(() => {
-    setDraftInstruction(surfaceFlows[activeSurface].guidedStep);
-    setConfirmedInstruction(surfaceFlows[activeSurface].guidedStep);
-    setPendingInstruction("");
-    setSelectedActionIds(new Set());
-  }, [activeSurface]);
-
-  function createAppliedBehavior(action: BehaviorAction): AppliedBehavior {
-    return {
-      id: `${Date.now()}-${action.id}`,
-      label: action.label,
-      detail: action.detail,
-      theme: activeSurface,
-      capability: action.capability,
-      synced: !offlineMode && action.capability !== "cross-device",
-      createdAt: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-    };
-  }
-
-  function applyAction(action: BehaviorAction) {
-    const next = createAppliedBehavior(action);
-    setEnabledActionIds((current) => new Set(current).add(action.id));
-    setAppliedBehaviors((current) => [next, ...current]);
-    setLastBatch([next]);
-    if (!next.synced) {
-      setSyncQueue((current) => [next, ...current]);
-    }
-    setLiveMessage(`${action.label} is now enabled for ${themeLabels[activeSurface]}.`);
-  }
-
-  function toggleSelectedAction(actionId: string) {
-    setSelectedActionIds((current) => {
-      const next = new Set(current);
-      if (next.has(actionId)) {
-        next.delete(actionId);
-      } else {
-        next.add(actionId);
-      }
-      return next;
-    });
-  }
-
-  function applySelectedActions() {
-    const selected = behaviorActions.filter((action) => selectedActionIds.has(action.id));
-    if (selected.length === 0) {
-      setLiveMessage("Select one or more actions before applying a batch.");
-      return;
-    }
-    const applied = selected.map(createAppliedBehavior);
-    setEnabledActionIds((current) => {
-      const next = new Set(current);
-      selected.forEach((action) => next.add(action.id));
-      return next;
-    });
-    setAppliedBehaviors((current) => [...applied, ...current]);
-    setSyncQueue((current) => [
-      ...applied.filter((action) => !action.synced),
-      ...current,
-    ]);
-    setLastBatch(applied);
-    setSelectedActionIds(new Set());
-    setLiveMessage(`${applied.length} features enabled with undo available.`);
-  }
-
-  function undoLastBatch() {
-    if (lastBatch.length === 0) {
-      setLiveMessage("No batch is available to undo.");
-      return;
-    }
-    const ids = new Set(lastBatch.map((action) => action.id));
-    const labels = new Set(lastBatch.map((action) => action.label));
-    setEnabledActionIds((current) => {
-      const next = new Set(current);
-      behaviorActions.forEach((action) => {
-        if (labels.has(action.label)) next.delete(action.id);
-      });
-      return next;
-    });
-    setAppliedBehaviors((current) => current.filter((action) => !ids.has(action.id)));
-    setSyncQueue((current) => current.filter((action) => !ids.has(action.id)));
-    setLiveMessage(`${lastBatch.length} actions undone.`);
-    setLastBatch([]);
-  }
-
-  function snoozeReminder() {
-    const until = new Date(Date.now() + 30 * 60 * 1000).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-    setSnoozedUntil(until);
-    setLiveMessage(`${themeLabels[activeSurface]} reminder snoozed until ${until}.`);
-  }
-
-  function createShareLink() {
-    const url = buildShareStateUrl(window.location.href.split("#")[0], {
-      theme: activeSurface,
-      mode,
-      role,
-      presetName: flow.presetName,
-      appliedCount: appliedBehaviors.length,
-    });
-    setShareUrl(url);
-    setLiveMessage(`${themeLabels[activeSurface]} state link created.`);
-  }
-
-  function reviewInlineEdit() {
-    setPendingInstruction(draftInstruction);
-    setLiveMessage("Inline edit is staged for confirmation.");
-  }
-
-  function confirmInlineEdit() {
-    if (!pendingInstruction) {
-      setLiveMessage("Review an inline edit before confirming it.");
-      return;
-    }
-    setConfirmedInstruction(pendingInstruction);
-    setPendingInstruction("");
-    setLiveMessage("Inline edit confirmed with safeguard review.");
-  }
-
-  function savePreset() {
-    const preset: SavedPreset = {
-      id: `${Date.now()}-${activeSurface}-${mode}-${role}`,
-      name: flow.presetName,
-      theme: activeSurface,
-      mode,
-      role,
-      instruction: confirmedInstruction,
-    };
-    setSavedPresets((current) => [preset, ...current.filter((item) => item.name !== preset.name)]);
-    setLiveMessage(`${preset.name} saved for quick restore.`);
-  }
-
-  function restorePreset(preset: SavedPreset) {
-    setActiveSurface(preset.theme);
-    setMode(preset.mode);
-    setRole(preset.role);
-    setDraftInstruction(preset.instruction);
-    setConfirmedInstruction(preset.instruction);
-    setLiveMessage(`${preset.name} restored.`);
-  }
-
-  function flushSyncQueue() {
-    setAppliedBehaviors((current) =>
-      current.map((action) => ({ ...action, synced: true })),
-    );
-    setSyncQueue([]);
-    setOfflineMode(false);
-    setLiveMessage("Queued actions synced across devices.");
-  }
-
-  return (
-    <section className="improvement-section action-lab" aria-labelledby="improvements-title">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Autopilot-AI</span>
-          <h2 id="improvements-title">Action lab</h2>
-        </div>
-        <div className="status-pill ready" aria-live="polite">
-          <CheckCircle2 size={15} aria-hidden="true" />
-          {surfaceOrder.length} workflows ready
-        </div>
-      </div>
-
-      <div className="improvement-overview" aria-label="Action lab metrics">
-        <Metric label="Surfaces" value={String(surfaceOrder.length)} />
-        <Metric label="Capabilities" value={String(capabilityOrder.length)} />
-        <Metric label="Enabled" value={String(enabledActionIds.size)} />
-        <Metric label="Applied" value={String(appliedBehaviors.length)} />
-        <Metric label="Sync queue" value={String(syncQueue.length)} />
-      </div>
-
-      <div className="surface-tabs" aria-label="Work surfaces">
-        {surfaceOrder.map((surface) => (
-          <button
-            className={activeSurface === surface ? "surface-tab active" : "surface-tab"}
-            key={surface}
-            type="button"
-            onClick={() => setActiveSurface(surface)}
-            aria-pressed={activeSurface === surface}
-          >
-            {themeLabels[surface]}
-          </button>
-        ))}
-      </div>
-
-      <div className="action-lab-layout">
-        <div className="lab-column">
-          <article className="lab-panel">
-            <div className="idea-kicker">
-              <span>{mode}</span>
-              <span>{roleLabels[role]}</span>
-              <span>{flow.source}</span>
-            </div>
-            <h3>{themeLabels[activeSurface]} recommendation</h3>
-            <p>{getRoleRecommendation(activeSurface, role)}</p>
-            <div className="segmented-row" aria-label="Mode">
-              {(["personalized", "guided"] as ImprovementMode[]).map((option) => (
-                <button
-                  className={mode === option ? "mini-filter active" : "mini-filter"}
-                  key={option}
-                  type="button"
-                  onClick={() => setMode(option)}
-                  aria-pressed={mode === option}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-            <label className="field-label">
-              Role-aware defaults
-              <select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
-                {(Object.keys(roleLabels) as UserRole[]).map((option) => (
-                  <option key={option} value={option}>
-                    {roleLabels[option]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="primary-action full-width" type="button" onClick={() => applyAction(recommendationAction)}>
-              Apply recommendation
-              <ArrowRight size={18} aria-hidden="true" />
-            </button>
-          </article>
-
-          <article className="lab-panel">
-            <h3>Inline editing safeguard</h3>
-            <textarea
-              value={draftInstruction}
-              onChange={(event) => setDraftInstruction(event.target.value)}
-              aria-label="Inline instruction editor"
-            />
-            {pendingInstruction ? (
-              <p className="pending-edit">Pending review: {pendingInstruction}</p>
-            ) : null}
-            <div className="button-row">
-              <button className="secondary-action" type="button" onClick={reviewInlineEdit}>
-                Review edit
-              </button>
-              <button className="secondary-action" type="button" onClick={confirmInlineEdit}>
-                Confirm update
-              </button>
-            </div>
-            <p className="confirmed-copy">Live instruction: {confirmedInstruction}</p>
-          </article>
-
-          <article className="lab-panel">
-            <h3>Cross-device continuity</h3>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={offlineMode}
-                onChange={(event) => setOfflineMode(event.target.checked)}
-              />
-              Work offline and queue changes
-            </label>
-            <p>{offlineMode ? "New actions will wait in the sync queue." : "New actions sync immediately unless they are continuity actions."}</p>
-            <button className="secondary-action" type="button" onClick={flushSyncQueue}>
-              Sync queued actions
-            </button>
-          </article>
-        </div>
-
-        <div className="lab-column wide">
-          <article className="lab-panel">
-            <div className="matrix-toolbar">
-              <strong>Actions</strong>
-              <div className="matrix-filters" aria-label="Behavior filters">
-                {(["all", ...capabilityOrder] as ImprovementFilter[]).map((filterOption) => (
-                  <button
-                    className={activeFilter === filterOption ? "mini-filter active" : "mini-filter"}
-                    key={filterOption}
-                    type="button"
-                    onClick={() => setActiveFilter(filterOption)}
-                    aria-pressed={activeFilter === filterOption}
-                  >
-                    {filterOption === "all" ? "All" : capabilityLabels[filterOption]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="behavior-grid" aria-label="Action cards">
-              {visibleActions.map((action) => (
-                <article
-                  className={enabledActionIds.has(action.id) ? "behavior-card enabled" : "behavior-card"}
-                  key={action.id}
-                >
-                  <label className="select-line">
-                    <input
-                      type="checkbox"
-                      checked={selectedActionIds.has(action.id)}
-                      onChange={() => toggleSelectedAction(action.id)}
-                    />
-                    <span>{action.label}</span>
-                  </label>
-                  <p>{action.detail}</p>
-                  {enabledActionIds.has(action.id) ? <span className="enabled-pill">Feature enabled</span> : null}
-                  <button className="secondary-action" type="button" onClick={() => applyAction(action)}>
-                    {enabledActionIds.has(action.id) ? "Use again" : "Use this"}
-                  </button>
-                </article>
-              ))}
-            </div>
-            <div className="button-row">
-              <button className="primary-action" type="button" onClick={applySelectedActions}>
-                Apply selected
-              </button>
-              <button className="secondary-action" type="button" onClick={undoLastBatch}>
-                Undo last batch
-              </button>
-            </div>
-          </article>
-
-          <div className="lab-split">
-            <article className="lab-panel">
-              <h3>Event trigger and snooze</h3>
-              <p>{flow.reminder}</p>
-              <button className="secondary-action" type="button" onClick={snoozeReminder}>
-                Snooze 30 minutes
-              </button>
-              {snoozedUntil ? <p className="confirmed-copy">Next reminder: {snoozedUntil}</p> : null}
-            </article>
-
-            <article className="lab-panel">
-              <h3>Shareable state</h3>
-              <p>Preserve the current surface, mode, role, preset, and applied count.</p>
-              <button className="secondary-action" type="button" onClick={createShareLink}>
-                Create state link
-              </button>
-              {shareUrl ? <input className="share-output" readOnly value={shareUrl} aria-label="Shareable state link" /> : null}
-            </article>
-          </div>
-
-          <div className="lab-split">
-            <article className="lab-panel">
-              <h3>Saved presets</h3>
-              <button className="secondary-action" type="button" onClick={savePreset}>
-                Save current preset
-              </button>
-              <div className="preset-list">
-                {savedPresets.length === 0 ? <p>No saved presets yet.</p> : null}
-                {savedPresets.map((preset) => (
-                  <button
-                    className="preset-row"
-                    key={preset.id}
-                    type="button"
-                    onClick={() => restorePreset(preset)}
-                  >
-                    <strong>{preset.name}</strong>
-                    <span>{roleLabels[preset.role]} - {preset.mode}</span>
-                  </button>
-                ))}
-              </div>
-            </article>
-
-            <article className="lab-panel">
-              <h3>Contextual guidance and accessibility</h3>
-              <button className="secondary-action" type="button" onClick={() => setShowGuidance((current) => !current)}>
-                {showGuidance ? "Hide guidance" : "Show guidance"}
-              </button>
-              {showGuidance ? (
-                <p>{flow.guidedStep} Keyboard users can tab through every control and rely on the live status below.</p>
-              ) : null}
-              <p className="sr-status" aria-live="polite">{liveMessage}</p>
-            </article>
-          </div>
-
-          <article className="lab-panel">
-            <h3>Applied actions</h3>
-            <div className="applied-list">
-              {appliedBehaviors.length === 0 ? <p>No actions applied yet.</p> : null}
-              {appliedBehaviors.slice(0, 6).map((action) => (
-                <div className="applied-row" key={action.id}>
-                  <strong>{action.label}</strong>
-                  <span>{action.createdAt} - {action.synced ? "synced" : "queued"}</span>
-                </div>
-              ))}
-            </div>
-          </article>
-        </div>
-      </div>
-    </section>
   );
 }
 

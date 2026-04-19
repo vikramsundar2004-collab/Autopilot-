@@ -10,7 +10,6 @@ export type WorkspacePageKey =
   | "productivity"
   | "sources"
   | "drafts"
-  | "actions"
   | "customize"
   | "calendar"
   | "privacy"
@@ -18,7 +17,6 @@ export type WorkspacePageKey =
 
 export interface WorkspaceSections {
   integrations: boolean;
-  actionLab: boolean;
   focusWindows: boolean;
   safeguards: boolean;
 }
@@ -72,7 +70,6 @@ export const defaultPageOrder: WorkspacePageKey[] = [
   "productivity",
   "sources",
   "drafts",
-  "actions",
   "customize",
   "calendar",
   "privacy",
@@ -84,7 +81,6 @@ export const defaultCustomizationSettings: CustomizationSettings = {
   density: "comfortable",
   sections: {
     integrations: true,
-    actionLab: true,
     focusWindows: true,
     safeguards: true,
   },
@@ -99,7 +95,7 @@ export const defaultCustomizationSettings: CustomizationSettings = {
     eventSize: "comfortable",
   },
   layout: {
-    sidebarStyle: "minimal",
+    sidebarStyle: "full",
     pageOrder: defaultPageOrder,
     pinnedPages: ["daily", "digest", "productivity"],
   },
@@ -180,7 +176,6 @@ export function sanitizeCustomizationSettings(value: unknown): CustomizationSett
     ),
     sections: {
       integrations: pickBoolean(sections.integrations, defaultCustomizationSettings.sections.integrations),
-      actionLab: pickBoolean(sections.actionLab, defaultCustomizationSettings.sections.actionLab),
       focusWindows: pickBoolean(sections.focusWindows, defaultCustomizationSettings.sections.focusWindows),
       safeguards: pickBoolean(sections.safeguards, defaultCustomizationSettings.sections.safeguards),
     },

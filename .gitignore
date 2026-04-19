@@ -11,5 +11,6 @@ supabase/.temp/
 
 *.tsbuildinfo
 *.log
+.vitest-localstorage*
 .DS_Store
 Thumbs.db

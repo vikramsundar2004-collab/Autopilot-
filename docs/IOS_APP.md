@@ -91,4 +91,4 @@ npx cap sync ios
 
 - The app is a native iOS WebView shell right now, not a full SwiftUI rewrite.
 - This is the right first iOS version because it keeps the product moving while the UI, Supabase auth, and integrations are still changing.
-- A future fully native SwiftUI app can reuse the same product structure: Daily plan, Productivity, Sources, Actions, Customize, Calendar, Privacy, and Premium plan.
+- A future fully native SwiftUI app can reuse the same product structure: Daily plan, Productivity, Sources, Drafts, Customize, Calendar, Privacy, and Enterprise.

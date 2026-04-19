@@ -105,8 +105,8 @@ Included:
 - everything in Starter
 - AI daily planner with schedule blocks
 - planning modes like Impact, Quick wins, and Deep work
-- action lab workflows
-- saved presets and workspace customization
+- delegation workflows with reusable handoff links
+- saved workspace customization
 - richer calendar planning
 - more sync volume and planning runs
 - priority support
