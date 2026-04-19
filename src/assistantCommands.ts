@@ -17,6 +17,19 @@ export function isDraftCommand(query: string): boolean {
   return /\b(draft|reply)\b/.test(normalized);
 }
 
+export function isAiSenderBlockCommand(query: string): boolean {
+  const normalized = query.toLowerCase();
+  return (
+    /\b(block|hide|private)\b/.test(normalized) ||
+    /\b(?:do\s+not|don't|dont|never|stop)\s+(?:let\s+(?:the\s+)?ai\s+)?(?:read|use|show|see|process)\b/.test(
+      normalized,
+    ) ||
+    /\b(?:keep|leave|exclude)\b[\s\S]{0,80}\b(?:out\s+of|away\s+from)\s+(?:the\s+)?ai\b/.test(
+      normalized,
+    )
+  );
+}
+
 export function extractDraftSearchTerm(query: string): string {
   return query
     .replace(/\b(generate|make|create|write|show)\b/gi, "")

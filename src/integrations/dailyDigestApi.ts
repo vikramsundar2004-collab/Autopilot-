@@ -132,7 +132,7 @@ export async function runDailyDigest(
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "Daily digest failed.",
+      message: await describeFunctionError(error, "Daily digest failed."),
       headline: "Daily digest could not be created.",
       brief: "",
       mainThings: [],

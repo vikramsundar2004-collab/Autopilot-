@@ -18,6 +18,7 @@ import { EnterprisePage } from "./EnterprisePage";
 import {
   extractDraftSearchTerm,
   extractSenderEmails,
+  isAiSenderBlockCommand,
   isDraftCommand,
   parseAssistantCalendarCommand,
 } from "./assistantCommands";
@@ -1052,6 +1053,10 @@ function App() {
       ),
     [aiSenderBlocks, workspaceEmails],
   );
+  const visibleInboxEmails = useMemo(
+    () => filterAiBlockedEmails(workspaceEmails, aiSenderBlocks),
+    [aiSenderBlocks, workspaceEmails],
+  );
   const aiEligibleEmails = useMemo(
     () => rankableEmails.filter((email) => isActionableEmailMessage(email)),
     [rankableEmails],
@@ -1072,10 +1077,10 @@ function App() {
   );
   const selectedInboxEmail = useMemo(
     () =>
-      workspaceEmails.find((email) => email.id === selectedInboxEmailId) ??
-      workspaceEmails[0] ??
+      visibleInboxEmails.find((email) => email.id === selectedInboxEmailId) ??
+      visibleInboxEmails[0] ??
       null,
-    [selectedInboxEmailId, workspaceEmails],
+    [selectedInboxEmailId, visibleInboxEmails],
   );
   const selectedInboxDraft = useMemo(
     () =>
@@ -1222,11 +1227,11 @@ function App() {
 
   useEffect(() => {
     setSelectedInboxEmailId((current) =>
-      workspaceEmails.some((email) => email.id === current)
+      visibleInboxEmails.some((email) => email.id === current)
         ? current
-        : workspaceEmails[0]?.id ?? null,
+        : visibleInboxEmails[0]?.id ?? null,
     );
-  }, [workspaceEmails]);
+  }, [visibleInboxEmails]);
   const nextSprintTask = orderedTasks.find((task) => task.status === "open");
   const activeSprintTask =
     orderedTasks.find((task) => task.id === activeSprintId && task.status === "open") ??
@@ -2280,7 +2285,7 @@ function App() {
               .filter((event) => event.provider !== "planner")
               .map(buildPlannerCalendarPayload)
           : undefined,
-    }, { accessToken: authSession?.access_token });
+    });
 
     if (!result.ok) {
       setDailyDigestNotice(result.message);
@@ -2596,7 +2601,7 @@ function App() {
     }
 
     const senderMatches = extractSenderEmails(query);
-    if (/\b(block|hide|private)\b/i.test(query) && senderMatches.length > 0) {
+    if (isAiSenderBlockCommand(query) && senderMatches.length > 0) {
       let blockedCount = 0;
       for (const sender of senderMatches) {
         const blocked = await blockSenderAddressFromAi(sender, undefined, "google", "Blocked from assistant command");
@@ -2906,7 +2911,7 @@ function App() {
             <InboxPage
               blockedSenders={aiSenderBlocks}
               draftTheme={draftTheme}
-              emails={workspaceEmails}
+              emails={visibleInboxEmails}
               notice={workspaceNotice}
               plannerRankableCount={rankableEmails.length}
               promotionalEmailCount={promotionalEmailCount}

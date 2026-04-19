@@ -25,4 +25,23 @@ describe("function error helper", () => {
 
     expect(message).toBe("boom");
   });
+
+  it("replaces raw JWT algorithm errors with a user-facing reauth message", async () => {
+    const message = await describeFunctionError(
+      {
+        context: {
+          clone() {
+            return this;
+          },
+          async json() {
+            return { error: "Unsupported JWT algorithm ES256" };
+          },
+        },
+      },
+      "fallback",
+    );
+
+    expect(message).toContain("session needs to be refreshed");
+    expect(message).not.toContain("ES256");
+  });
 });

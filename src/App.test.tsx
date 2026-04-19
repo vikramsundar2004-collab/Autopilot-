@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { CUSTOMIZATION_STORAGE_KEY, TUTORIAL_STORAGE_KEY } from "./preferences";
@@ -279,6 +279,24 @@ describe("App", () => {
     );
   });
 
+  it("removes a blocked sender from the inbox list and advances to another message", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Escalation from Northstar Health/i,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Block sender from AI" }));
+
+    const messageList = screen.getByRole("list", { name: "Inbox message list" });
+    await waitFor(() => {
+      expect(within(messageList).queryByText("Escalation from Northstar Health")).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Board packet edits before tomorrow morning" })).toBeInTheDocument();
+  });
+
   it("uses the assistant to collect blocked senders before planning", async () => {
     render(<App />);
 
@@ -304,6 +322,18 @@ describe("App", () => {
       await screen.findByRole("heading", { name: "Work from a larger daily calendar" }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Deep work").length).toBeGreaterThan(0);
+  });
+
+  it("lets the assistant block senders with plain do-not-read phrasing", async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("Assistant request"), {
+      target: { value: "Do not read messages from payroll@example.com" },
+    });
+    fireEvent.click(screen.getByText("Run assistant"));
+
+    expect(await screen.findByText("Assistant updated AI privacy")).toBeInTheDocument();
+    expect(screen.getByText(/1 sender blocked from AI planning/)).toBeInTheDocument();
   });
 
   it("uses the assistant to open the drafts page for a requested reply", async () => {

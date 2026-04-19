@@ -5,11 +5,11 @@ export async function describeFunctionError(
   const context = extractErrorContext(error);
   if (context) {
     const message = await readResponseMessage(context);
-    if (message) return message;
+    if (message) return normalizeFunctionErrorMessage(message, fallbackMessage);
   }
 
   if (error instanceof Error && error.message.trim()) {
-    return error.message;
+    return normalizeFunctionErrorMessage(error.message, fallbackMessage);
   }
 
   return fallbackMessage;
@@ -82,4 +82,19 @@ function statusLabel(response: ResponseLike): string | null {
   if (typeof response.status !== "number") return null;
   const suffix = response.statusText ? ` ${response.statusText}` : "";
   return `Edge Function ${response.status}${suffix}`;
+}
+
+function normalizeFunctionErrorMessage(message: string, fallbackMessage: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return fallbackMessage;
+
+  if (/unsupported jwt algorithm/i.test(trimmed)) {
+    return "Your Google session needs to be refreshed before the AI service can run. Sign in with Google again, then refresh the daily digest.";
+  }
+
+  if (/bearer token|jwt/i.test(trimmed) && /\b(expired|invalid|missing|session)\b/i.test(trimmed)) {
+    return "Your Google session expired before the AI service could run. Sign in again, then retry.";
+  }
+
+  return trimmed;
 }
