@@ -20,6 +20,8 @@ const verificationSignalPatterns = [
   /\b(?:one[\s-]?time|single[\s-]?use)\s+(?:code|passcode|password)\b/i,
   /\b(?:two[\s-]?factor|2fa|otp|magic link|device verification|email confirmation|account confirmation)\b/i,
   /\b(?:verify|confirm|approve)(?:\s+\w+){0,4}\s+(?:email|account|identity|login|sign[\s-]?in|device)\b/i,
+  /\b(?:login|sign[\s-]?in)(?:\s+\w+){0,4}\s+from\s+(?:a\s+)?new\s+location\b/i,
+  /\b(?:verify|confirm|approve)(?:\s+\w+){0,6}\s+new\s+location\b/i,
   /\bsudo email verification code\b/i,
 ];
 

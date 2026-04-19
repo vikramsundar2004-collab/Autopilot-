@@ -44,6 +44,7 @@ export interface DailyDigestResult {
 
 export async function runDailyDigest(
   request: DailyDigestRequest = {},
+  options: { accessToken?: string | null } = {},
 ): Promise<DailyDigestResult> {
   if (import.meta.env.MODE === "test") {
     return {
@@ -77,6 +78,7 @@ export async function runDailyDigest(
 
   try {
     const { data, error } = await invokeEdgeFunction<any>("daily-digest", {
+      accessToken: options.accessToken,
       body: request,
     });
 

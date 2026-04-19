@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
@@ -94,6 +94,7 @@ import {
 } from "./integrations/plannerApi";
 import {
   runDailyDigest,
+  type DailyDigestActionItem,
   type DailyDigestResult,
 } from "./integrations/dailyDigestApi";
 import { loadLatestPlannerOutput } from "./integrations/plannerData";
@@ -157,8 +158,17 @@ interface AssistantMessage {
   detail: string;
 }
 
+interface CalendarEventPlacement {
+  event: CalendarEvent;
+  top: number;
+  height: number;
+  lane: number;
+  laneCount: number;
+}
+
 const appPages = [
   "daily",
+  "digest",
   "inbox",
   "productivity",
   "sources",
@@ -190,6 +200,7 @@ const dailyDigestActionCount = 5;
 
 const pageLabels: Record<AppPage, string> = {
   daily: "Daily plan",
+  digest: "Daily digest",
   inbox: "Inbox",
   productivity: "Productivity",
   sources: "Sources",
@@ -1081,31 +1092,47 @@ function App() {
     [aiSenderBlocks, plannerActionItems],
   );
   const visibleManualCalendarEvents = useMemo(
-    () => manualCalendarEvents.filter((event) => localDateFromIso(event.start) === planningDate),
+    () => manualCalendarEvents.filter((event) => eventOccursOnDate(event, planningDate)),
     [manualCalendarEvents, planningDate],
+  );
+  const visibleWorkspaceCalendarEvents = useMemo(
+    () => workspaceCalendarEvents.filter((event) => eventOccursOnDate(event, planningDate)),
+    [planningDate, workspaceCalendarEvents],
+  );
+  const visiblePlannerCalendarEvents = useMemo(
+    () => plannerCalendarEvents.filter((event) => eventOccursOnDate(event, planningDate)),
+    [plannerCalendarEvents, planningDate],
   );
   const visibleEnterpriseCalendarEvents = useMemo(
     () =>
       enterpriseAssignments
-        .filter((assignment) => localDateFromIso(assignment.startAt) === planningDate)
+        .filter((assignment) =>
+          eventOccursOnDate(
+            {
+              start: assignment.startAt,
+              end: assignment.endAt,
+            },
+            planningDate,
+          ),
+        )
         .map(mapEnterpriseAssignmentToCalendarEvent),
     [enterpriseAssignments, planningDate],
   );
   const calendarEvents = useMemo(
     () =>
       [
-        ...workspaceCalendarEvents,
-        ...plannerCalendarEvents,
+        ...visibleWorkspaceCalendarEvents,
+        ...visiblePlannerCalendarEvents,
         ...visibleEnterpriseCalendarEvents,
         ...visibleManualCalendarEvents,
       ].sort(
         (left, right) => new Date(left.start).getTime() - new Date(right.start).getTime(),
       ),
     [
-      plannerCalendarEvents,
+      visiblePlannerCalendarEvents,
       visibleEnterpriseCalendarEvents,
       visibleManualCalendarEvents,
-      workspaceCalendarEvents,
+      visibleWorkspaceCalendarEvents,
     ],
   );
   const baseTasks = useMemo(
@@ -1188,7 +1215,10 @@ function App() {
       verificationEmailCount,
     ],
   );
-  const visibleDailyDigest = dailyDigest ?? localDailyDigest;
+  const visibleDailyDigest = useMemo(
+    () => mergeVisibleDailyDigest(dailyDigest, localDailyDigest),
+    [dailyDigest, localDailyDigest],
+  );
 
   useEffect(() => {
     setSelectedInboxEmailId((current) =>
@@ -2230,6 +2260,11 @@ function App() {
   }
 
   async function buildDailyDigestFromApi() {
+    if (!previewMode && !authSession) {
+      setDailyDigestNotice("Sign in again before building the AI daily digest.");
+      return;
+    }
+
     setIsDailyDigestLoading(true);
     setDailyDigestNotice("Building the daily digest from synced inbox, calendar context, and live interest news...");
 
@@ -2245,7 +2280,7 @@ function App() {
               .filter((event) => event.provider !== "planner")
               .map(buildPlannerCalendarPayload)
           : undefined,
-    });
+    }, { accessToken: authSession?.access_token });
 
     if (!result.ok) {
       setDailyDigestNotice(result.message);
@@ -2815,6 +2850,27 @@ function App() {
             {renderTaskSection()}
           </>
         );
+      case "digest":
+        return (
+          <>
+            <PageHeader
+              eyebrow="Daily digest"
+              title="Read the ranked brief before you work"
+              body="Use one page for the live brief, numbered action queue, current inbox ranking, and web-backed interest updates."
+            />
+            <DailyDigestPanel
+              digest={visibleDailyDigest}
+              interestInput={digestInterestInput}
+              interests={digestInterests}
+              loading={isDailyDigestLoading}
+              notice={dailyDigestNotice}
+              onAddInterest={addCustomDigestInterest}
+              onInterestInputChange={setDigestInterestInput}
+              onRunDigest={buildDailyDigestFromApi}
+              onToggleInterest={toggleDigestInterest}
+            />
+          </>
+        );
       case "productivity":
         return (
           <>
@@ -3236,6 +3292,7 @@ function Sidebar({
 }) {
   const navIcons: Record<AppPage, ReactNode> = {
     daily: <Clock3 size={18} aria-hidden="true" />,
+    digest: <MailOpen size={18} aria-hidden="true" />,
     inbox: <Inbox size={18} aria-hidden="true" />,
     productivity: <MailOpen size={18} aria-hidden="true" />,
     sources: <Link2 size={18} aria-hidden="true" />,
@@ -5843,6 +5900,19 @@ function FullCalendarSection({
   const hours = buildCalendarHours(preferences.startHour, preferences.endHour);
   const gridHeight = hours.length * hourHeight;
   const monthLabel = formatCalendarMonthYear(date);
+  const allDayEvents = events.filter((event) =>
+    isAllDayCalendarEvent(event, preferences.startHour, preferences.endHour),
+  );
+  const timedEvents = events.filter(
+    (event) => !isAllDayCalendarEvent(event, preferences.startHour, preferences.endHour),
+  );
+  const timedEventPlacements = buildCalendarEventPlacements(
+    timedEvents,
+    preferences.startHour,
+    preferences.endHour,
+    hourHeight,
+  );
+  const agendaEvents = [...allDayEvents, ...timedEvents];
 
   return (
     <section className="full-calendar-section" aria-labelledby="full-calendar-title">
@@ -5994,25 +6064,45 @@ function FullCalendarSection({
             </div>
           </div>
 
-          <div className="calendar-board">
-            <div className="calendar-board-head">
-              <button
-                className="secondary-action"
-                type="button"
+            <div className="calendar-board">
+              <div className="calendar-board-head">
+                <button
+                  className="secondary-action"
+                  type="button"
                 onClick={onCreateDraft}
               >
                 Create event
               </button>
               <button className="secondary-action" type="button" onClick={() => void onQuickCommand("Add calendar Deep work tomorrow 3pm to 4pm")}>
                 Protect focus
-              </button>
-              <span>{formatCalendarHeader(date)}</span>
-            </div>
+                </button>
+                <span>{formatCalendarHeader(date)}</span>
+              </div>
 
-            <div
-              className={`calendar-day-grid full size-${preferences.eventSize}`}
-              aria-label="Daily calendar"
-              style={{ height: `${gridHeight}px` }}
+              {allDayEvents.length > 0 ? (
+                <div className="calendar-all-day-strip" aria-label="All day events">
+                  <span className="calendar-all-day-label">All day</span>
+                  <div className="calendar-all-day-list">
+                    {allDayEvents.map((event) => (
+                      <button
+                        aria-label={event.editable ? `Edit ${event.title}` : `View ${event.title}`}
+                        className={`calendar-all-day-chip ${event.type}`}
+                        key={`all-day-${event.id}`}
+                        type="button"
+                        onClick={() => onEditEvent(event)}
+                      >
+                        <strong>{event.title}</strong>
+                        <small>{event.editable ? "Editable" : "Read only"}</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div
+                className={`calendar-day-grid full size-${preferences.eventSize}`}
+                aria-label="Daily calendar"
+                style={{ height: `${gridHeight}px` }}
             >
               {hours.map((hour) => (
                 <div
@@ -6032,30 +6122,30 @@ function FullCalendarSection({
                 </div>
               ))}
               <div className="calendar-events-layer">
-                {events.map((event) => (
+                {timedEventPlacements.map((placement) => (
                   <button
                     aria-label={
-                      event.editable ? `Edit ${event.title}` : `View ${event.title}`
+                      placement.event.editable ? `Edit ${placement.event.title}` : `View ${placement.event.title}`
                     }
-                    className={`calendar-event-block ${event.type}`}
-                    key={event.id}
+                    className={`calendar-event-block ${placement.event.type}`}
+                    key={placement.event.id}
                     type="button"
-                    onClick={() => onEditEvent(event)}
-                    style={{
-                      top: `${getCalendarEventTop(event, preferences.startHour, hourHeight)}px`,
-                      height: `${getCalendarEventHeight(
-                        event,
-                        preferences.startHour,
-                        preferences.endHour,
-                        hourHeight,
-                      )}px`,
-                    }}
+                    onClick={() => onEditEvent(placement.event)}
+                    style={
+                      {
+                        top: `${placement.top}px`,
+                        height: `${placement.height}px`,
+                        "--lane": String(placement.lane),
+                        "--lane-count": String(placement.laneCount),
+                        "--lane-gap": "8px",
+                      } as CSSProperties
+                    }
                   >
-                    <strong>{event.title}</strong>
+                    <strong>{placement.event.title}</strong>
                     <span>
-                      {formatTime(event.start)} - {formatTime(event.end)}
+                      {formatTime(placement.event.start)} - {formatTime(placement.event.end)}
                     </span>
-                    <small>{event.editable ? "Editable" : "Read only"}</small>
+                    <small>{placement.event.editable ? "Editable" : "Read only"}</small>
                   </button>
                 ))}
               </div>
@@ -6077,10 +6167,12 @@ function FullCalendarSection({
           {preferences.showAgenda ? (
             <section className="full-calendar-agenda" aria-label="Calendar agenda">
               <h3>Agenda</h3>
-              {events.map((event) => (
+              {agendaEvents.map((event) => (
                 <article className={`event-row ${event.type}`} key={event.id}>
                   <span>
-                    {formatTime(event.start)} - {formatTime(event.end)}
+                    {isAllDayCalendarEvent(event, preferences.startHour, preferences.endHour)
+                      ? "All day"
+                      : `${formatTime(event.start)} - ${formatTime(event.end)}`}
                   </span>
                   <strong>{event.title}</strong>
                   {event.attendees ? <small>{event.attendees.join(", ")}</small> : null}
@@ -6536,6 +6628,69 @@ function buildDailyHeadline(tasks: ActionItem[]): string {
   return `Handle the next ${Math.min(topPriorityActionCount, openTasks.length)} priority actions and protect one focused block.`;
 }
 
+function buildDailyDigestActionItems(tasks: ActionItem[]): DailyDigestActionItem[] {
+  return tasks
+    .filter((task) => task.status === "open")
+    .filter((task) => !isVerificationActionLike(task))
+    .slice(0, dailyDigestActionCount)
+    .map((task) => ({
+      sourceMessageId: task.sourceEmailId,
+      sourceUrl: task.sourceUrl ?? null,
+      title: task.title,
+      detail: task.detail,
+      priority: task.priority,
+    }));
+}
+
+function buildDailyDigestMainThings({
+  actionItems,
+  calendarEvents,
+  planningDate,
+  verificationEmailCount,
+}: {
+  actionItems: DailyDigestActionItem[];
+  calendarEvents: CalendarEvent[];
+  planningDate: string;
+  verificationEmailCount: number;
+}): string[] {
+  return [
+    actionItems[0] ? `Start with ${actionItems[0].title}.` : null,
+    actionItems.length > 1
+      ? `${actionItems.length} numbered actions are queued and will refill as you finish them.`
+      : null,
+    calendarEvents.length > 0
+      ? `${calendarEvents.length} calendar commitments already exist on ${formatCalendarHeader(planningDate)}.`
+      : "The calendar is still open enough to protect a focus block after the top action is moving.",
+    verificationEmailCount > 0
+      ? `${verificationEmailCount} verification or sign-in emails were kept out of the priority list.`
+      : null,
+  ].filter((item): item is string => Boolean(item));
+}
+
+function mergeVisibleDailyDigest(
+  apiDigest: DailyDigestResult | null,
+  localDigest: DailyDigestResult,
+): DailyDigestResult {
+  if (!apiDigest) return localDigest;
+
+  const apiMainThings = apiDigest.mainThings.filter(
+    (item) => typeof item === "string" && item.trim().length > 0,
+  );
+  const mergedMainThings = Array.from(
+    new Set([...apiMainThings, ...localDigest.mainThings].map((item) => item.trim())),
+  ).slice(0, 4);
+
+  return {
+    ...apiDigest,
+    headline: apiDigest.headline.trim() || localDigest.headline,
+    brief: apiDigest.brief.trim() || localDigest.brief,
+    mainThings: mergedMainThings.length > 0 ? mergedMainThings : localDigest.mainThings,
+    actionItems: localDigest.actionItems,
+    blockedEmailCount: Math.max(apiDigest.blockedEmailCount, localDigest.blockedEmailCount),
+    verificationEmailCount: Math.max(apiDigest.verificationEmailCount, localDigest.verificationEmailCount),
+  };
+}
+
 function buildLocalDailyDigest({
   blockedEmailCount,
   calendarEvents,
@@ -6551,26 +6706,13 @@ function buildLocalDailyDigest({
   tasks: ActionItem[];
   verificationEmailCount: number;
 }): DailyDigestResult {
-  const openTasks = tasks.filter((task) => task.status === "open");
-  const topActions = openTasks.slice(0, dailyDigestActionCount).map((task) => ({
-    sourceMessageId: task.sourceEmailId,
-    sourceUrl: task.sourceUrl ?? null,
-    title: task.title,
-    detail: task.detail,
-    priority: task.priority,
-  }));
-  const mainThings = [
-    topActions[0] ? `Start with ${topActions[0].title}.` : null,
-    topActions.length > 1
-      ? `The next ${topActions.length} actions are already ranked from the synced inbox.`
-      : null,
-    calendarEvents.length > 0
-      ? `${calendarEvents.length} calendar commitments already exist on ${formatCalendarHeader(planningDate)}.`
-      : "The calendar is still open enough to protect a focus block after the top action is moving.",
-    verificationEmailCount > 0
-      ? `${verificationEmailCount} verification or sign-in emails were kept out of the priority list.`
-      : null,
-  ].filter((item): item is string => Boolean(item));
+  const topActions = buildDailyDigestActionItems(tasks);
+  const mainThings = buildDailyDigestMainThings({
+    actionItems: topActions,
+    calendarEvents,
+    planningDate,
+    verificationEmailCount,
+  });
 
   return {
     ok: true,
@@ -6725,6 +6867,114 @@ function buildCalendarHours(startHour: number, endHour: number): number[] {
   );
 }
 
+function eventOccursOnDate(event: Pick<CalendarEvent, "start" | "end">, dateISO: string): boolean {
+  const { dayStartIso, dayEndIso } = buildLocalDayRange(dateISO);
+  const eventStart = new Date(event.start).getTime();
+  const eventEnd = new Date(event.end).getTime();
+  const dayStart = new Date(dayStartIso).getTime();
+  const dayEnd = new Date(dayEndIso).getTime();
+
+  if (
+    Number.isNaN(eventStart) ||
+    Number.isNaN(eventEnd) ||
+    !Number.isFinite(eventStart) ||
+    !Number.isFinite(eventEnd)
+  ) {
+    return localDateFromIso(event.start) === dateISO;
+  }
+
+  return eventStart < dayEnd && eventEnd > dayStart;
+}
+
+function isAllDayCalendarEvent(
+  event: CalendarEvent,
+  startHour: number,
+  endHour: number,
+): boolean {
+  const start = new Date(event.start);
+  const end = new Date(event.end);
+  const durationMinutes = Math.max(0, (end.getTime() - start.getTime()) / 60_000);
+  const spansMultipleDates = localDateFromIso(event.start) !== localDateFromIso(event.end);
+  const coversVisibleDay = start.getHours() <= startHour && end.getHours() >= endHour;
+  return spansMultipleDates || durationMinutes >= 12 * 60 || coversVisibleDay;
+}
+
+function buildCalendarEventPlacements(
+  events: CalendarEvent[],
+  startHour: number,
+  endHour: number,
+  hourHeight: number,
+): CalendarEventPlacement[] {
+  const sortedEvents = [...events].sort((left, right) => {
+    const startDelta = new Date(left.start).getTime() - new Date(right.start).getTime();
+    if (startDelta !== 0) return startDelta;
+    return new Date(right.end).getTime() - new Date(left.end).getTime();
+  });
+  const placements: CalendarEventPlacement[] = [];
+  let cluster: CalendarEvent[] = [];
+  let clusterEnd = Number.NEGATIVE_INFINITY;
+
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+    placements.push(
+      ...layoutCalendarEventCluster(cluster, startHour, endHour, hourHeight),
+    );
+    cluster = [];
+    clusterEnd = Number.NEGATIVE_INFINITY;
+  };
+
+  sortedEvents.forEach((event) => {
+    const startTime = new Date(event.start).getTime();
+    const endTime = new Date(event.end).getTime();
+    if (cluster.length === 0 || startTime < clusterEnd) {
+      cluster.push(event);
+      clusterEnd = Math.max(clusterEnd, endTime);
+      return;
+    }
+
+    flushCluster();
+    cluster.push(event);
+    clusterEnd = endTime;
+  });
+
+  flushCluster();
+  return placements;
+}
+
+function layoutCalendarEventCluster(
+  events: CalendarEvent[],
+  startHour: number,
+  endHour: number,
+  hourHeight: number,
+): CalendarEventPlacement[] {
+  const laneEnds: number[] = [];
+
+  const placements = events.map((event) => {
+    const startTime = new Date(event.start).getTime();
+    let lane = laneEnds.findIndex((endTime) => endTime <= startTime);
+    if (lane < 0) {
+      lane = laneEnds.length;
+      laneEnds.push(new Date(event.end).getTime());
+    } else {
+      laneEnds[lane] = new Date(event.end).getTime();
+    }
+
+    return {
+      event,
+      top: getCalendarEventTop(event, startHour, hourHeight),
+      height: getCalendarEventHeight(event, startHour, endHour, hourHeight),
+      lane,
+      laneCount: 1,
+    };
+  });
+
+  const laneCount = Math.max(1, laneEnds.length);
+  return placements.map((placement) => ({
+    ...placement,
+    laneCount,
+  }));
+}
+
 function getCalendarEventTop(
   event: CalendarEvent,
   startHour: number,
@@ -6743,9 +6993,15 @@ function getCalendarEventHeight(
 ): number {
   const start = new Date(event.start);
   const end = new Date(event.end);
+  const viewportStart = new Date(start);
+  viewportStart.setHours(startHour, 0, 0, 0);
+  const viewportEnd = new Date(start);
+  viewportEnd.setHours(endHour, 0, 0, 0);
+  const visibleStart = Math.max(start.getTime(), viewportStart.getTime());
+  const visibleEnd = Math.min(end.getTime(), viewportEnd.getTime());
+  const durationMinutes = Math.max(20, (visibleEnd - visibleStart) / 60_000);
   const top = getCalendarEventTop(event, startHour, hourHeight);
   const gridHeight = Math.max(1, endHour - startHour) * hourHeight;
-  const durationMinutes = Math.max(20, (end.getTime() - start.getTime()) / 60_000);
   const naturalHeight = Math.max(30, (durationMinutes / 60) * hourHeight);
   const availableHeight = Math.max(22, gridHeight - top - 4);
   return Math.min(naturalHeight, availableHeight);

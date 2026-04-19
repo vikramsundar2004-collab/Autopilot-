@@ -109,6 +109,34 @@ describe("App", () => {
     expect(screen.getByLabelText("Custom digest interest")).toBeInTheDocument();
   });
 
+  it("keeps the digest queue full after a top action is completed", () => {
+    render(<App />);
+
+    const summary = screen.getByLabelText("Daily command summary");
+    const beforeTitles = within(summary)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent?.replace(/^\s*\d+\.\s*/, "").trim() ?? "");
+    const firstTitle = beforeTitles[0];
+
+    fireEvent.click(screen.getByRole("button", { name: `Mark ${firstTitle} done` }));
+
+    const afterTitles = within(summary)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent?.replace(/^\s*\d+\.\s*/, "").trim() ?? "");
+
+    expect(afterTitles).toHaveLength(beforeTitles.length);
+    expect(afterTitles).not.toContain(firstTitle);
+  });
+
+  it("gives the daily digest its own page", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Daily digest" }));
+
+    expect(screen.getByRole("heading", { name: "Read the ranked brief before you work" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Daily digest" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("creates handoffs that move work into waiting with a reusable share link", () => {
     render(<App />);
 
@@ -408,6 +436,9 @@ describe("App", () => {
 
   it("keeps every major surface on its own sidebar page", () => {
     render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Daily digest" }));
+    expect(screen.getByRole("heading", { name: "Read the ranked brief before you work" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
     expect(screen.getByRole("heading", { name: "Inbox command center" })).toBeInTheDocument();

@@ -5,6 +5,7 @@ export type EventBlockSize = "compact" | "comfortable" | "large";
 export type SidebarStyle = "full" | "compact" | "minimal";
 export type WorkspacePageKey =
   | "daily"
+  | "digest"
   | "inbox"
   | "productivity"
   | "sources"
@@ -60,6 +61,7 @@ export const TUTORIAL_STORAGE_KEY = "autopilot-ai-tutorial";
 
 export const defaultPageOrder: WorkspacePageKey[] = [
   "daily",
+  "digest",
   "inbox",
   "productivity",
   "sources",
@@ -91,9 +93,9 @@ export const defaultCustomizationSettings: CustomizationSettings = {
     eventSize: "comfortable",
   },
   layout: {
-    sidebarStyle: "full",
+    sidebarStyle: "minimal",
     pageOrder: defaultPageOrder,
-    pinnedPages: ["daily", "productivity"],
+    pinnedPages: ["daily", "digest", "productivity"],
   },
 };
 
