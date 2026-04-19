@@ -100,6 +100,15 @@ describe("App", () => {
     expect(screen.getByText("First relief")).toBeInTheDocument();
   });
 
+  it("shows a daily digest with a today call action list and interest controls", () => {
+    render(<App />);
+
+    const summary = screen.getByLabelText("Daily command summary");
+    expect(within(summary).getAllByRole("listitem").length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByRole("heading", { name: "Main things today" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Custom digest interest")).toBeInTheDocument();
+  });
+
   it("creates handoffs that move work into waiting with a reusable share link", () => {
     render(<App />);
 
@@ -224,6 +233,9 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Inbox" }));
+    expect(
+      screen.getByText("Scroll the inbox list and click any email to read it in the right pane."),
+    ).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {
         name: /Escalation from Northstar Health/i,
@@ -278,6 +290,17 @@ describe("App", () => {
       await screen.findByRole("heading", { name: "Edit reply drafts before they go back into Gmail" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Escalation from Northstar Health")).toBeInTheDocument();
+  });
+
+  it("shows the top three action items from the larger synced inbox sample on Sources", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+
+    expect(screen.getByText("Top 3 action items from the current synced inbox")).toBeInTheDocument();
+    expect(screen.getByText(/Showing 8 of 8 synced emails below/i)).toBeInTheDocument();
+    expect(screen.getByText(/Send a direct reply to Northstar Health/i)).toBeInTheDocument();
+    expect(screen.getByText(/Approve or decline the analytics renewal/i)).toBeInTheDocument();
   });
 
   it("applies workflow templates as usable productivity shortcuts", () => {

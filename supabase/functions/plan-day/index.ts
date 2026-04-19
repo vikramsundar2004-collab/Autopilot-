@@ -51,10 +51,12 @@ Deno.serve(async (req) => {
   const policy = await loadPolicy(supabase, organizationId);
   const emails = Array.isArray(body.emails)
     ? body.emails
-    : await loadEmails(supabase, userId, policy.max_email_messages ?? 50);
+    : await loadEmails(supabase, userId, policy.max_email_messages ?? 200);
+  const nonVerificationEmails = emails.filter((email) => !isVerificationEmail(email));
+  const verificationEmailCount = Math.max(0, emails.length - nonVerificationEmails.length);
   const blockedSenderEmails = await loadAiSenderBlocks(supabase, userId);
-  const planningEmails = filterBlockedEmails(emails, blockedSenderEmails);
-  const blockedEmailCount = Math.max(0, emails.length - planningEmails.length);
+  const planningEmails = filterBlockedEmails(nonVerificationEmails, blockedSenderEmails);
+  const blockedEmailCount = Math.max(0, nonVerificationEmails.length - planningEmails.length);
   const events =
     Array.isArray(body.calendarEvents)
       ? body.calendarEvents
@@ -80,6 +82,7 @@ Deno.serve(async (req) => {
     source: planned.source,
     model: planned.model,
     blockedEmailCount,
+    verificationEmailCount,
   });
 
   return json({
@@ -88,6 +91,7 @@ Deno.serve(async (req) => {
     model: planned.model,
     fallbackReason: planned.fallbackReason,
     blockedEmailCount,
+    verificationEmailCount,
     ...planned.plan,
     persisted,
   });
@@ -186,6 +190,26 @@ function filterBlockedEmails(emails: any[], blockedSenderEmails: string[]) {
   });
 }
 
+function isVerificationEmail(email: any) {
+  const text = [
+    email.subject,
+    email.snippet,
+    email.bodyPreview,
+    email.body_preview,
+    email.fromName,
+    email.fromEmail,
+    email.from_name,
+    email.from_email,
+    ...(Array.isArray(email.labels) ? email.labels : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /\b(verification|verify your email|verify your account|confirm your email|confirm your account|sign-in code|signin code|security code|one-time passcode|one-time password|otp|two-factor|2fa|magic link|login code|verification code)\b/.test(
+    text,
+  );
+}
+
 async function planWithAiOrFallback(input: any) {
   const openAiKey = Deno.env.get("OPENAI_API_KEY");
   const model = normalizeOpenAiModel(
@@ -210,7 +234,7 @@ async function planWithAiOrFallback(input: any) {
           {
             role: "system",
             content:
-              "You are Autopilot-AI. Extract action items from email, schedule them around calendar events, preserve evidence, and require approval for sending or external writes.",
+              "You are Autopilot-AI. Extract action items from email, schedule them around calendar events, preserve evidence, and require approval for sending or external writes. Verification, OTP, security-code, sign-in, magic-link, and account-confirmation emails are not important work and should never become action items.",
           },
           { role: "user", content: JSON.stringify(input) },
         ],
@@ -247,8 +271,9 @@ async function persistPlanSafely(supabase: any, input: any) {
       status: "pending",
       input_counts: {
         emails: input.emails.length,
-        totalEmails: input.emails.length + (input.blockedEmailCount ?? 0),
+        totalEmails: input.emails.length + (input.blockedEmailCount ?? 0) + (input.verificationEmailCount ?? 0),
         blockedEmails: input.blockedEmailCount ?? 0,
+        verificationEmails: input.verificationEmailCount ?? 0,
         calendarEvents: input.calendarEventCount ?? 0,
       },
     })
@@ -379,6 +404,7 @@ async function persistPlan(supabase: any, input: any) {
       model: input.model,
       emailCount: input.emails.length,
       blockedEmailCount: input.blockedEmailCount ?? 0,
+      verificationEmailCount: input.verificationEmailCount ?? 0,
     },
   });
 
@@ -570,7 +596,7 @@ function normalizePlan(plan: any, date: string) {
 function defaultPolicy() {
   return {
     ai_model: "gpt-5.4",
-    max_email_messages: 50,
+    max_email_messages: 200,
     max_calendar_events: 100,
     require_approval_for_sending: true,
     require_approval_for_external_writes: true,

@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
   const date = typeof body.date === "string" ? body.date : new Date().toISOString().slice(0, 10);
   const dayStartIso = typeof body.dayStartIso === "string" ? body.dayStartIso : null;
   const dayEndIso = typeof body.dayEndIso === "string" ? body.dayEndIso : null;
-  const maxEmails = clamp(body.maxEmails, 1, 50, 25);
+  const maxEmails = clamp(body.maxEmails, 1, 200, 100);
   const maxEvents = clamp(body.maxEvents, 1, 100, 50);
   const bodyAccessToken = typeof body.providerAccessToken === "string" ? body.providerAccessToken : "";
   const bodyRefreshToken = typeof body.providerRefreshToken === "string" ? body.providerRefreshToken : "";
@@ -224,19 +224,18 @@ Deno.serve(async (req) => {
 async function fetchGmailMessages(accessToken: string, maxResults: number) {
   const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
   listUrl.searchParams.set("maxResults", String(maxResults));
-  listUrl.searchParams.set("q", "newer_than:14d -category:promotions -category:social");
+  listUrl.searchParams.set("q", "newer_than:30d -category:promotions -category:social");
   const listed = await googleFetch(accessToken, listUrl);
   const messages = Array.isArray(listed.messages) ? listed.messages.slice(0, maxResults) : [];
-  const details = await Promise.all(
-    messages.map(async (message: any) => {
-      const detailUrl = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}`);
-      detailUrl.searchParams.set("format", "metadata");
-      detailUrl.searchParams.append("metadataHeaders", "From");
-      detailUrl.searchParams.append("metadataHeaders", "Subject");
-      detailUrl.searchParams.append("metadataHeaders", "Date");
-      return googleFetch(accessToken, detailUrl);
-    }),
-  );
+  const detailUrls = messages.map((message: any) => {
+    const detailUrl = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}`);
+    detailUrl.searchParams.set("format", "metadata");
+    detailUrl.searchParams.append("metadataHeaders", "From");
+    detailUrl.searchParams.append("metadataHeaders", "Subject");
+    detailUrl.searchParams.append("metadataHeaders", "Date");
+    return detailUrl;
+  });
+  const details = await googleFetchInBatches(accessToken, detailUrls, 20);
 
   return details.map((detail: any) => {
     const headers = headerMap(detail.payload?.headers ?? []);
@@ -252,6 +251,16 @@ async function fetchGmailMessages(accessToken: string, maxResults: number) {
       receivedAt: gmailReceivedAt(headers.date, detail.internalDate),
     };
   });
+}
+
+async function googleFetchInBatches(accessToken: string, urls: URL[], batchSize: number) {
+  const results: any[] = [];
+  for (let index = 0; index < urls.length; index += batchSize) {
+    const currentBatch = urls.slice(index, index + batchSize);
+    const batchResults = await Promise.all(currentBatch.map((url) => googleFetch(accessToken, url)));
+    results.push(...batchResults);
+  }
+  return results;
 }
 
 async function fetchCalendarEvents(

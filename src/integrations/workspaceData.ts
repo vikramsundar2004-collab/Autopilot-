@@ -53,7 +53,7 @@ export interface LoadWorkspaceDataOptions {
   eventLimit?: number;
 }
 
-const defaultEmailLimit = 25;
+const defaultEmailLimit = 200;
 const defaultEventLimit = 50;
 
 export async function loadWorkspaceData(

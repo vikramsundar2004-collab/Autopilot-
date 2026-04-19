@@ -91,6 +91,10 @@ import {
   type PlannerApiScheduleBlock,
   runDailyPlanner,
 } from "./integrations/plannerApi";
+import {
+  runDailyDigest,
+  type DailyDigestResult,
+} from "./integrations/dailyDigestApi";
 import { loadLatestPlannerOutput } from "./integrations/plannerData";
 import { generateReplyDraftsApi } from "./integrations/draftApi";
 import {
@@ -166,6 +170,21 @@ const appPages = [
 type AppPage = (typeof appPages)[number];
 
 const assistantSetupStorageKey = "autopilot-ai-assistant-setup";
+const digestInterestStorageKey = "autopilot-ai-digest-interests";
+const digestInterestSuggestions = [
+  "AI",
+  "Productivity",
+  "Startups",
+  "Finance",
+  "Engineering",
+  "School",
+  "Health",
+  "Family",
+] as const;
+const defaultSyncedEmailTarget = 200;
+const sourceEmailPreviewCount = 12;
+const topPriorityActionCount = 3;
+const dailyDigestActionCount = 5;
 
 const pageLabels: Record<AppPage, string> = {
   daily: "Daily plan",
@@ -312,6 +331,26 @@ function getInitialPage(): AppPage {
 function loadAssistantSetupState(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(assistantSetupStorageKey) === "done";
+}
+
+function loadDigestInterestsState(): string[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(digestInterestStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return Array.from(
+      new Set(
+        parsed
+          .map((item) => normalizeDigestInterest(String(item ?? "")))
+          .filter(Boolean),
+      ),
+    ).slice(0, 6);
+  } catch {
+    return [];
+  }
 }
 
 const filterLabels: Record<TaskFilter, string> = {
@@ -926,6 +965,17 @@ function App() {
       ? "Preview mode uses local planning logic until live Gmail and Calendar are connected."
       : "Run the AI planner after syncing Gmail and Calendar to load a saved plan.",
   );
+  const [dailyDigest, setDailyDigest] = useState<DailyDigestResult | null>(null);
+  const [isDailyDigestLoading, setIsDailyDigestLoading] = useState(false);
+  const [dailyDigestNotice, setDailyDigestNotice] = useState(
+    previewMode
+      ? "Preview digest is based on the local sample inbox. Run the AI digest to browse live news for your selected interests."
+      : "Build an AI digest from the synced inbox and selected interests.",
+  );
+  const [digestInterests, setDigestInterests] = useState<string[]>(() =>
+    loadDigestInterestsState(),
+  );
+  const [digestInterestInput, setDigestInterestInput] = useState("");
   const [aiSenderBlocks, setAiSenderBlocks] = useState<AiSenderBlock[]>([]);
   const [privacyControlNotice, setPrivacyControlNotice] = useState(
     previewMode
@@ -983,7 +1033,10 @@ function App() {
   const isGoogleConnected = googleConnection.connected;
 
   const aiEligibleEmails = useMemo(
-    () => filterAiBlockedEmails(workspaceEmails, aiSenderBlocks),
+    () =>
+      filterAiBlockedEmails(workspaceEmails, aiSenderBlocks).filter(
+        (email) => !isVerificationEmail(email),
+      ),
     [aiSenderBlocks, workspaceEmails],
   );
   const replyDraftBlueprints = useMemo(
@@ -1079,6 +1132,10 @@ function App() {
     () => prioritizeTasksForMode(plan.rankedTasks, planMode),
     [plan.rankedTasks, planMode],
   );
+  const topPriorityActionItems = useMemo(
+    () => orderedTasks.filter((task) => task.status === "open").slice(0, topPriorityActionCount),
+    [orderedTasks],
+  );
   const sourceCount = useMemo(
     () => new Set(orderedTasks.map((task) => task.source)).size,
     [orderedTasks],
@@ -1091,6 +1148,38 @@ function App() {
     () => workspaceEmails.filter((email) => isAdLikeEmail(email)).length,
     [workspaceEmails],
   );
+  const verificationEmailCount = useMemo(
+    () => workspaceEmails.filter((email) => isVerificationEmail(email)).length,
+    [workspaceEmails],
+  );
+  const blockedEmailCount = useMemo(
+    () =>
+      Math.max(
+        0,
+        workspaceEmails.length - aiEligibleEmails.length - verificationEmailCount,
+      ),
+    [aiEligibleEmails.length, verificationEmailCount, workspaceEmails.length],
+  );
+  const localDailyDigest = useMemo(
+    () =>
+      buildLocalDailyDigest({
+        blockedEmailCount,
+        calendarEvents,
+        emails: aiEligibleEmails,
+        planningDate,
+        tasks: orderedTasks,
+        verificationEmailCount,
+      }),
+    [
+      aiEligibleEmails,
+      blockedEmailCount,
+      calendarEvents,
+      orderedTasks,
+      planningDate,
+      verificationEmailCount,
+    ],
+  );
+  const visibleDailyDigest = dailyDigest ?? localDailyDigest;
 
   useEffect(() => {
     setSelectedInboxEmailId((current) =>
@@ -1160,6 +1249,20 @@ function App() {
   }, [assistantSetupComplete]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(digestInterestStorageKey, JSON.stringify(digestInterests));
+  }, [digestInterests]);
+
+  useEffect(() => {
+    setDailyDigest(null);
+    setDailyDigestNotice(
+      previewMode
+        ? "Preview digest refreshed for the selected day. Run the AI digest to browse live news for your selected interests."
+        : "Build an AI digest from the synced inbox and selected interests.",
+    );
+  }, [planningDate, previewMode]);
+
+  useEffect(() => {
     const draftIds = new Set(replyDraftBlueprints.map((draft) => draft.id));
     setReplyDraftEdits((current) =>
       Object.fromEntries(
@@ -1199,6 +1302,7 @@ function App() {
     const result = await loadWorkspaceData({
       allowDemoFallback: previewMode,
       date: planningDate,
+      emailLimit: defaultSyncedEmailTarget,
     });
     setWorkspaceSource(result.source);
     setWorkspaceNotice(result.notice);
@@ -1715,7 +1819,7 @@ function App() {
       date: planningDate,
       dayStartIso,
       dayEndIso,
-      maxEmails: 25,
+      maxEmails: defaultSyncedEmailTarget,
       maxEvents: 50,
     });
     setConnectionNotice(
@@ -2059,7 +2163,14 @@ function App() {
     }
 
     setProductivityNotice(
-      `${result.message} ${result.actionCount ?? 0} actions, ${result.scheduleBlockCount ?? 0} schedule blocks, ${result.approvalCount ?? 0} approvals.`,
+      [
+        result.message,
+        `Ranked ${aiEligibleEmails.length} eligible emails into ${result.actionItems.length} action items.`,
+        `${result.actionCount ?? 0} actions, ${result.scheduleBlockCount ?? 0} schedule blocks, ${result.approvalCount ?? 0} approvals.`,
+        buildTopActionSummary(result.actionItems),
+      ]
+        .filter(Boolean)
+        .join(" "),
     );
     const emailById = new Map(workspaceEmails.map((email) => [email.id, email]));
     setPlannerActionItems(
@@ -2070,10 +2181,88 @@ function App() {
     setPlannerCalendarEvents(
       result.scheduleBlocks.map((block, index) => mapPlannerBlockToCalendarEvent(block, index)),
     );
-    setPlannerNotice(result.message);
+    setPlannerNotice(
+      [
+        result.message,
+        `Ranked ${aiEligibleEmails.length} eligible emails.`,
+        buildTopActionSummary(result.actionItems),
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
     if (result.persisted) {
       await refreshPlannerOutput();
     }
+  }
+
+  function toggleDigestInterest(interest: string) {
+    const normalized = normalizeDigestInterest(interest);
+    if (!normalized) return;
+
+    setDigestInterests((current) =>
+      current.includes(normalized)
+        ? current.filter((item) => item !== normalized)
+        : [...current, normalized].slice(0, 6),
+    );
+  }
+
+  function addCustomDigestInterest() {
+    const normalized = normalizeDigestInterest(digestInterestInput);
+    if (!normalized) {
+      setDailyDigestNotice("Add an interest before asking the AI digest to browse recent news.");
+      return;
+    }
+
+    setDigestInterests((current) =>
+      current.includes(normalized) ? current : [...current, normalized].slice(0, 6),
+    );
+    setDigestInterestInput("");
+  }
+
+  async function buildDailyDigestFromApi() {
+    setIsDailyDigestLoading(true);
+    setDailyDigestNotice("Building the daily digest from synced inbox, calendar context, and live interest news...");
+
+    const result = await runDailyDigest({
+      date: planningDate,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles",
+      organizationId: activeEnterpriseId ?? undefined,
+      interests: digestInterests,
+      calendarEvents:
+        calendarEvents.length > 0
+          ? calendarEvents
+              .filter((event) => event.provider !== "planner")
+              .map(buildPlannerCalendarPayload)
+          : undefined,
+    });
+
+    if (!result.ok) {
+      setDailyDigestNotice(result.message);
+      setIsDailyDigestLoading(false);
+      return;
+    }
+
+    setDailyDigest(result);
+    setDailyDigestNotice(
+      [
+        result.message,
+        `Ranked ${result.emailCount} synced emails.`,
+        result.verificationEmailCount > 0
+          ? `${result.verificationEmailCount} verification threads were ignored.`
+          : "",
+        result.blockedEmailCount > 0
+          ? `${result.blockedEmailCount} blocked private emails stayed out of the digest.`
+          : "",
+        result.interestEvents.length > 0
+          ? `${result.interestEvents.length} live interest events were pulled from the web.`
+          : digestInterests.length > 0
+            ? "No strong recent news matched the selected interests."
+            : "Select interests if you want the digest to browse recent news for you.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    setIsDailyDigestLoading(false);
   }
 
   function navigate(page: AppPage) {
@@ -2464,7 +2653,11 @@ function App() {
     recordMomentum("playbook", `${template.title} template applied`, template.detail);
   }
 
-  const dailyHeadline = buildDailyHeadline(orderedTasks);
+  const dailyHeadline = dailyDigest?.headline ?? buildDailyHeadline(orderedTasks);
+  const dailyBrief =
+    dailyDigest?.brief ??
+    visibleDailyDigest.brief ??
+    "Autopilot-AI condenses the ranked inbox into today's main things and a smaller action list.";
 
   function renderProductivityPanel() {
     return (
@@ -2554,12 +2747,29 @@ function App() {
               <div>
                 <span className="eyebrow">Today&apos;s call</span>
                 <h2>{dailyHeadline}</h2>
+                <p>{dailyBrief}</p>
+                <ol className="command-band-list">
+                  {visibleDailyDigest.actionItems.slice(0, dailyDigestActionCount).map((item, index) => (
+                    <li key={`${item.sourceMessageId ?? item.title}-${index}`}>{item.title}</li>
+                  ))}
+                </ol>
               </div>
               <button className="primary-action" type="button" onClick={() => navigate("productivity")}>
                 Start next task
                 <ArrowRight size={18} aria-hidden="true" />
               </button>
             </section>
+            <DailyDigestPanel
+              digest={visibleDailyDigest}
+              interestInput={digestInterestInput}
+              interests={digestInterests}
+              loading={isDailyDigestLoading}
+              notice={dailyDigestNotice}
+              onAddInterest={addCustomDigestInterest}
+              onInterestInputChange={setDigestInterestInput}
+              onRunDigest={buildDailyDigestFromApi}
+              onToggleInterest={toggleDigestInterest}
+            />
             <AssistantPanel
               assistantMessages={assistantMessages}
               draftTheme={draftTheme}
@@ -2678,6 +2888,8 @@ function App() {
               privacyNotice={privacyControlNotice}
               source={workspaceSource}
               syncedEmails={workspaceEmails}
+              topActionItems={topPriorityActionItems}
+              verificationEmailCount={verificationEmailCount}
             />
             <SupabaseSetupPanel />
           </>
@@ -3267,6 +3479,8 @@ function WorkspaceSnapshotPanel({
   privacyNotice,
   source,
   syncedEmails,
+  topActionItems,
+  verificationEmailCount,
 }: {
   calendarEvents: CalendarEvent[];
   blockedSenders: AiSenderBlock[];
@@ -3280,6 +3494,8 @@ function WorkspaceSnapshotPanel({
   privacyNotice: string;
   source: WorkspaceDataSource;
   syncedEmails: EmailMessage[];
+  topActionItems: ActionItem[];
+  verificationEmailCount: number;
 }) {
   const statusLabel =
     source === "live" ? "Live workspace" : source === "demo" ? "Preview workspace" : "Waiting for sync";
@@ -3325,6 +3541,10 @@ function WorkspaceSnapshotPanel({
           <p>private senders blocked from AI planning</p>
         </article>
         <article>
+          <strong>{verificationEmailCount}</strong>
+          <p>verification or sign-in emails ignored by AI ranking</p>
+        </article>
+        <article>
           <strong>{source === "live" ? "No fake tasks" : "Preview only"}</strong>
           <p>
             {source === "live"
@@ -3333,9 +3553,27 @@ function WorkspaceSnapshotPanel({
           </p>
         </article>
       </div>
+      {topActionItems.length > 0 ? (
+        <article className="task-empty-state" aria-label="Top three action items">
+          <strong>Top 3 action items from the current synced inbox</strong>
+          <p>
+            {topActionItems
+              .map((task, index) => `${index + 1}. ${task.title}`)
+              .join(" ")}
+          </p>
+        </article>
+      ) : null}
+      {syncedEmails.length > 0 ? (
+        <p className="inline-help">
+          Showing {Math.min(syncedEmails.length, sourceEmailPreviewCount)} of {syncedEmails.length}{" "}
+          synced emails below. The planner ranks the full eligible inbox, not just these preview
+          cards.
+        </p>
+      ) : null}
       <div className="source-proof-list" aria-label="Recent synced email threads">
-        {syncedEmails.slice(0, 4).map((email) => {
+        {syncedEmails.slice(0, sourceEmailPreviewCount).map((email) => {
           const senderBlock = findAiSenderBlock(email.senderEmail, blockedSenders);
+          const verificationEmail = isVerificationEmail(email);
 
           return (
             <article className="source-proof-card" key={email.id}>
@@ -3377,7 +3615,11 @@ function WorkspaceSnapshotPanel({
                 <span className="inline-help">This thread has no sender email to block yet.</span>
               )}
               <span className={senderBlock ? "status-pill" : "status-pill ready"}>
-                {senderBlock ? "Private sender blocked" : "AI can use this sender"}
+                {verificationEmail
+                  ? "Ignored by AI as verification mail"
+                  : senderBlock
+                    ? "Private sender blocked"
+                    : "AI can use this sender"}
               </span>
             </div>
             </article>
@@ -3712,13 +3954,18 @@ function InboxPage({
               <span className="eyebrow">Messages</span>
               <h2>Read like Gmail</h2>
             </div>
+            <span className="status-pill ready">{emails.length} synced</span>
           </div>
+          <p className="inline-help">
+            Scroll the inbox list and click any email to read it in the right pane.
+          </p>
           <div className="inbox-list" role="list" aria-label="Inbox message list">
             {emails.length > 0 ? (
               emails.map((email) => {
                 const isSelected = selectedEmail?.id === email.id;
                 const isBlocked =
                   email.senderEmail ? Boolean(findAiSenderBlock(email.senderEmail, blockedSenders)) : false;
+                const verificationEmail = isVerificationEmail(email);
                 return (
                   <button
                     key={email.id}
@@ -3737,6 +3984,7 @@ function InboxPage({
                     <p>{email.preview}</p>
                     <div className="label-row">
                       {isBlocked ? <span className="mini-filter">blocked from AI</span> : null}
+                      {verificationEmail ? <span className="mini-filter">verification</span> : null}
                       {isAdLikeEmail(email) ? <span className="mini-filter">promo-like</span> : null}
                       {email.labels.slice(0, 2).map((label) => (
                         <span className="mini-filter" key={`${email.id}-${label}`}>
@@ -3767,6 +4015,9 @@ function InboxPage({
                 <div className="label-row">
                   <span className={`priority ${selectedEmail.priority}`}>{selectedEmail.priority}</span>
                   <span className="mini-filter">{selectedEmail.category}</span>
+                  {isVerificationEmail(selectedEmail) ? (
+                    <span className="mini-filter">ignored by AI</span>
+                  ) : null}
                   {selectedSenderBlock ? <span className="mini-filter">AI blocked</span> : null}
                 </div>
               </div>
@@ -5203,6 +5454,158 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function DailyDigestPanel({
+  digest,
+  interestInput,
+  interests,
+  loading,
+  notice,
+  onAddInterest,
+  onInterestInputChange,
+  onRunDigest,
+  onToggleInterest,
+}: {
+  digest: DailyDigestResult;
+  interestInput: string;
+  interests: string[];
+  loading: boolean;
+  notice: string;
+  onAddInterest: () => void;
+  onInterestInputChange: (value: string) => void;
+  onRunDigest: () => void;
+  onToggleInterest: (interest: string) => void;
+}) {
+  return (
+    <section className="daily-digest-panel" aria-labelledby="daily-digest-title">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">Daily digest</span>
+          <h2 id="daily-digest-title">Main things today</h2>
+        </div>
+        <div className="status-pill ready" aria-live="polite">
+          {loading ? "Building digest..." : `${digest.emailCount} emails ranked`}
+        </div>
+      </div>
+      <p className="section-note">{notice}</p>
+      <div className="digest-grid">
+        <article className="digest-card">
+          <div className="digest-hero-copy">
+            <strong>{digest.headline}</strong>
+            <p>{digest.brief}</p>
+          </div>
+
+          <div className="digest-block">
+            <h3>Main priorities</h3>
+            <ol className="digest-list">
+              {digest.mainThings.map((item, index) => (
+                <li key={`${item}-${index}`}>{item}</li>
+              ))}
+            </ol>
+          </div>
+
+          <div className="digest-block">
+            <h3>Action items</h3>
+            <div className="digest-action-list">
+              {digest.actionItems.map((item) => (
+                <article className="digest-action-card" key={`${item.sourceMessageId ?? item.title}-${item.title}`}>
+                  <div className="digest-action-topline">
+                    <span className={`priority ${item.priority}`}>{item.priority}</span>
+                    {item.sourceUrl ? (
+                      <a href={item.sourceUrl} rel="noreferrer" target="_blank">
+                        Open email
+                      </a>
+                    ) : null}
+                  </div>
+                  <strong>{item.title}</strong>
+                  <p>{item.detail}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </article>
+
+        <article className="digest-card">
+          <div className="digest-block">
+            <h3>Interest brief</h3>
+            <p className="section-note">
+              Pick the topics that matter to you. The AI digest browses the web for recent news before it writes the brief.
+            </p>
+            <div className="interest-chip-row" aria-label="Suggested interests">
+              {digestInterestSuggestions.map((interest) => (
+                <button
+                  aria-label={`Interest ${interest}`}
+                  className={interests.includes(interest) ? "mini-filter active" : "mini-filter"}
+                  key={interest}
+                  type="button"
+                  onClick={() => onToggleInterest(interest)}
+                  aria-pressed={interests.includes(interest)}
+                >
+                  {interest}
+                </button>
+              ))}
+            </div>
+            <div className="digest-input-row">
+              <input
+                aria-label="Custom digest interest"
+                placeholder="Add a custom interest"
+                value={interestInput}
+                onChange={(event) => onInterestInputChange(event.target.value)}
+              />
+              <button className="secondary-action" type="button" onClick={onAddInterest}>
+                Add interest
+              </button>
+            </div>
+            {interests.length > 0 ? (
+              <div className="interest-chip-row" aria-label="Selected interests">
+                {interests.map((interest) => (
+                  <button
+                    aria-label={`Selected interest ${interest}`}
+                    className="mini-filter active"
+                    key={interest}
+                    type="button"
+                    onClick={() => onToggleInterest(interest)}
+                  >
+                    {interest}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <button className="primary-action full-width" type="button" onClick={onRunDigest} disabled={loading}>
+              {loading ? "Building AI digest" : "Refresh AI digest"}
+            </button>
+          </div>
+
+          <div className="digest-block">
+            <h3>Recent events for your interests</h3>
+            {digest.interestEvents.length > 0 ? (
+              <div className="interest-event-list">
+                {digest.interestEvents.map((event) => (
+                  <article className="interest-event-card" key={`${event.interest}-${event.title}`}>
+                    <div className="digest-action-topline">
+                      <span className="mini-filter active">{event.interest}</span>
+                      <span>{formatInterestEventDate(event.publishedAt)}</span>
+                    </div>
+                    <strong>{event.title}</strong>
+                    <p>{event.summary}</p>
+                    <a href={event.url} rel="noreferrer" target="_blank">
+                      {event.source}
+                    </a>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <article className="task-empty-state">
+                <strong>No recent interest brief yet.</strong>
+                <p>Select interests, then refresh the AI digest to browse current news from the web.</p>
+              </article>
+            )}
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function IntegrationCard({
   googleConnection,
   provider,
@@ -6072,19 +6475,113 @@ function buildHandoffShareUrl(
 }
 
 function buildDailyHeadline(tasks: ActionItem[]): string {
-  const openTasks = tasks.filter((task) => task.status === "open").slice(0, 3);
+  const openTasks = tasks.filter((task) => task.status === "open").slice(0, topPriorityActionCount);
   if (openTasks.length === 0) {
     return "Connect a source or add a manual task so Autopilot-AI can build today's real plan.";
   }
 
-  const titles = openTasks.map((task) => task.title.replace(/: /, " "));
-  if (titles.length === 1) {
-    return `Start with ${titles[0].toLowerCase()}.`;
+  const urgentCount = openTasks.filter((task) => task.priority === "urgent").length;
+  if (urgentCount > 0) {
+    return `Close ${urgentCount} urgent thread${urgentCount === 1 ? "" : "s"} first, then move the next priority actions.`;
   }
-  if (titles.length === 2) {
-    return `Do ${titles[0].toLowerCase()} and ${titles[1].toLowerCase()} first.`;
+  if (openTasks.length === 1) {
+    return "Start with the highest-leverage thread and keep the rest of the day contained.";
   }
-  return `Do ${titles[0].toLowerCase()}, ${titles[1].toLowerCase()}, and ${titles[2].toLowerCase()} first.`;
+  return `Handle the next ${Math.min(topPriorityActionCount, openTasks.length)} priority actions and protect one focused block.`;
+}
+
+function buildLocalDailyDigest({
+  blockedEmailCount,
+  calendarEvents,
+  emails,
+  planningDate,
+  tasks,
+  verificationEmailCount,
+}: {
+  blockedEmailCount: number;
+  calendarEvents: CalendarEvent[];
+  emails: EmailMessage[];
+  planningDate: string;
+  tasks: ActionItem[];
+  verificationEmailCount: number;
+}): DailyDigestResult {
+  const openTasks = tasks.filter((task) => task.status === "open");
+  const topActions = openTasks.slice(0, dailyDigestActionCount).map((task) => ({
+    sourceMessageId: task.sourceEmailId,
+    sourceUrl: task.sourceUrl ?? null,
+    title: task.title,
+    detail: task.detail,
+    priority: task.priority,
+  }));
+  const mainThings = [
+    topActions[0] ? `Start with ${topActions[0].title}.` : null,
+    topActions.length > 1
+      ? `The next ${topActions.length} actions are already ranked from the synced inbox.`
+      : null,
+    calendarEvents.length > 0
+      ? `${calendarEvents.length} calendar commitments already exist on ${formatCalendarHeader(planningDate)}.`
+      : "The calendar is still open enough to protect a focus block after the top action is moving.",
+    verificationEmailCount > 0
+      ? `${verificationEmailCount} verification or sign-in emails were kept out of the priority list.`
+      : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    ok: true,
+    message: "Local digest is ready.",
+    headline: buildDailyHeadline(tasks),
+    brief: `Reviewed ${emails.length} synced emails and condensed the day into the next useful moves without surfacing verification mail as important work.`,
+    mainThings,
+    actionItems: topActions,
+    interestEvents: [],
+    emailCount: emails.length,
+    blockedEmailCount,
+    verificationEmailCount,
+  };
+}
+
+function buildTopActionSummary(
+  actions: Array<{
+    title: string;
+    status?: string;
+  }>,
+): string {
+  const topActions = actions
+    .filter((action) => action.status !== "waiting")
+    .slice(0, topPriorityActionCount)
+    .map((action) => action.title);
+
+  if (topActions.length === 0) return "";
+  return `Top 3: ${topActions.join(" | ")}.`;
+}
+
+function isVerificationEmail(
+  email: Pick<EmailMessage, "subject" | "preview" | "labels" | "from" | "senderEmail">,
+): boolean {
+  const searchableText = [
+    email.subject,
+    email.preview,
+    email.from,
+    email.senderEmail ?? "",
+    ...email.labels,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return /\b(verification|verify your email|verify your account|confirm your email|confirm your account|sign-in code|signin code|security code|one-time passcode|one-time password|otp|two-factor|2fa|magic link|login code|verification code)\b/.test(
+    searchableText,
+  );
+}
+
+function normalizeDigestInterest(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 40);
+}
+
+function formatInterestEventDate(value: string | null): string {
+  if (!value) return "Recent";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Recent";
+  return parsed.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 function prioritizeTasksForMode(tasks: ActionItem[], mode: PlanMode): ActionItem[] {
