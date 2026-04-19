@@ -252,6 +252,7 @@ async function planWithAiOrFallback(input: any) {
           format: {
             type: "json_schema",
             name: "autopilot_daily_plan",
+            strict: true,
             schema: plannerSchema,
           },
         },
@@ -694,11 +695,101 @@ function json(body: unknown, status = 200) {
 
 const plannerSchema = {
   type: "object",
+  additionalProperties: false,
   required: ["summary", "actionItems", "scheduleBlocks", "enterpriseSignals"],
   properties: {
-    summary: { type: "object" },
-    actionItems: { type: "array" },
-    scheduleBlocks: { type: "array" },
-    enterpriseSignals: { type: "array" },
+    summary: {
+      type: "object",
+      additionalProperties: false,
+      required: ["headline", "brief", "openCount", "urgentCount", "focusMinutes", "risks"],
+      properties: {
+        headline: { type: "string" },
+        brief: { type: "string" },
+        openCount: { type: "number" },
+        urgentCount: { type: "number" },
+        focusMinutes: { type: "number" },
+        risks: {
+          type: "array",
+          items: { type: "string" },
+        },
+      },
+    },
+    actionItems: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "sourceMessageId",
+          "title",
+          "detail",
+          "priority",
+          "category",
+          "dueAt",
+          "status",
+          "confidence",
+          "effortMinutes",
+          "impact",
+          "risk",
+          "labels",
+          "requiresApproval",
+          "approvalType",
+          "rankScore",
+        ],
+        properties: {
+          sourceMessageId: { type: ["string", "null"] },
+          title: { type: "string" },
+          detail: { type: "string" },
+          priority: { type: "string", enum: ["urgent", "high", "medium", "low"] },
+          category: { type: "string", enum: ["reply", "review", "schedule", "send", "approve", "follow-up"] },
+          dueAt: { type: "string" },
+          status: { type: "string", enum: ["open", "waiting"] },
+          confidence: { type: "number" },
+          effortMinutes: { type: "number" },
+          impact: { type: "number" },
+          risk: { type: "string" },
+          labels: {
+            type: "array",
+            items: { type: "string" },
+          },
+          requiresApproval: { type: "boolean" },
+          approvalType: { type: ["string", "null"] },
+          rankScore: { type: "number" },
+        },
+      },
+    },
+    scheduleBlocks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "detail", "startAt", "endAt", "blockType", "sourceMessageIds"],
+        properties: {
+          title: { type: "string" },
+          detail: { type: "string" },
+          startAt: { type: "string" },
+          endAt: { type: "string" },
+          blockType: { type: "string", enum: ["focus", "meeting", "admin", "break", "overflow"] },
+          sourceMessageIds: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+      },
+    },
+    enterpriseSignals: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["type", "title", "detail", "severity"],
+        properties: {
+          type: { type: "string" },
+          title: { type: "string" },
+          detail: { type: "string" },
+          severity: { type: "string", enum: ["low", "medium", "high"] },
+        },
+      },
+    },
   },
 };

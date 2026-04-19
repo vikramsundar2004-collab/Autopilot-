@@ -976,15 +976,15 @@ function App() {
   const [plannerCalendarEvents, setPlannerCalendarEvents] = useState<CalendarEvent[]>([]);
   const [plannerNotice, setPlannerNotice] = useState(
     previewMode
-      ? "Preview mode uses local planning logic until live Gmail and Calendar are connected."
-      : "Run the AI planner after syncing Gmail and Calendar to load a saved plan.",
+      ? "Preview mode uses Gmail-style local ranking until live Gmail and Calendar are connected."
+      : "Sync Gmail and Calendar to activate Gmail-style local ranking. Run the AI planner only if you want saved schedule blocks.",
   );
   const [dailyDigest, setDailyDigest] = useState<DailyDigestResult | null>(null);
   const [isDailyDigestLoading, setIsDailyDigestLoading] = useState(false);
   const [dailyDigestNotice, setDailyDigestNotice] = useState(
     previewMode
-      ? "Preview digest is based on the local sample inbox. Run the AI digest to browse live news for your selected interests."
-      : "Build an AI digest from the synced inbox and selected interests.",
+      ? "Preview digest is based on the local sample inbox. Run the optional AI digest only to browse live news for your selected interests."
+      : "The daily digest already uses Gmail-style local ranking. Run the optional AI digest only to browse live interest news and polish the summary.",
   );
   const [digestInterests, setDigestInterests] = useState<string[]>(() =>
     loadDigestInterestsState(),
@@ -1140,12 +1140,13 @@ function App() {
       visibleWorkspaceCalendarEvents,
     ],
   );
+  const localRankedTasks = useMemo(
+    () => deriveActionItems(aiEligibleEmails, planningDate),
+    [aiEligibleEmails, planningDate],
+  );
   const baseTasks = useMemo(
-    () =>
-      visiblePlannerActionItems.length > 0
-        ? visiblePlannerActionItems
-        : deriveActionItems(aiEligibleEmails, planningDate),
-    [aiEligibleEmails, planningDate, visiblePlannerActionItems],
+    () => (localRankedTasks.length > 0 ? localRankedTasks : visiblePlannerActionItems),
+    [localRankedTasks, visiblePlannerActionItems],
   );
   const tasks = useMemo(
     () =>
@@ -1301,8 +1302,8 @@ function App() {
     setDailyDigest(null);
     setDailyDigestNotice(
       previewMode
-        ? "Preview digest refreshed for the selected day. Run the AI digest to browse live news for your selected interests."
-        : "Build an AI digest from the synced inbox and selected interests.",
+        ? "Preview digest refreshed for the selected day. Run the optional AI digest only to browse live news for your selected interests."
+        : "The daily digest already uses Gmail-style local ranking. Run the optional AI digest only to browse live interest news and polish the summary.",
     );
   }, [planningDate, previewMode]);
 
@@ -1359,14 +1360,14 @@ function App() {
     if (previewMode && !authSession) {
       setPlannerActionItems([]);
       setPlannerCalendarEvents([]);
-      setPlannerNotice("Preview mode uses local task extraction until a live AI plan is saved.");
+      setPlannerNotice("Preview mode uses Gmail-style local ranking. Saved AI schedule blocks appear only after a real source is connected.");
       return;
     }
 
     if (!authSession && !previewMode) {
       setPlannerActionItems([]);
       setPlannerCalendarEvents([]);
-      setPlannerNotice("Run the AI planner after syncing Gmail and Calendar to load a saved plan.");
+      setPlannerNotice("Sync Gmail and Calendar to activate Gmail-style local ranking. Run the AI planner only if you want saved schedule blocks.");
       return;
     }
 
@@ -1881,8 +1882,8 @@ function App() {
       setWorkspaceNotice(result.message);
       setPlannerNotice(
         result.persisted
-          ? "Google sync completed. Run the AI planner again to rebuild the Gmail-backed action list."
-          : "Google data is loaded for this session. Run the AI planner now while the current Google session is active.",
+          ? "Google sync completed. Gmail-style local ranking is active. Run the AI planner only if you want saved schedule blocks."
+          : "Google data is loaded for this session. Gmail-style local ranking is active. Run the AI planner only if you want saved schedule blocks while this session is open.",
       );
       if (result.persisted) {
         await refreshWorkspaceData();
@@ -2201,8 +2202,8 @@ function App() {
     if (!result.ok) {
       setPlannerActionItems([]);
       setPlannerCalendarEvents([]);
-      setPlannerNotice("OpenAI planner unavailable. Autopilot-AI is using local workspace intelligence for now.");
-      setProductivityNotice(`OpenAI planner unavailable. ${result.message} Using local workspace intelligence instead.`);
+      setPlannerNotice("OpenAI planner unavailable. Autopilot-AI is keeping Gmail-style local ranking as the source of action items.");
+      setProductivityNotice(`OpenAI planner unavailable. ${result.message} Gmail-style local ranking is still driving the action list.`);
       return;
     }
 
@@ -2229,7 +2230,8 @@ function App() {
     setPlannerNotice(
       [
         result.message,
-        `Ranked ${rankableEmails.length} planner-eligible emails from ${workspaceEmails.length} synced messages.`,
+        `Saved AI planning reviewed ${rankableEmails.length} planner-eligible emails from ${workspaceEmails.length} synced messages.`,
+        "Action items still come from Gmail-style local ranking to avoid extra credit usage.",
         buildTopActionSummary(rankedActionItems),
       ]
         .filter(Boolean)
@@ -2960,7 +2962,7 @@ function App() {
               notice={workspaceNotice}
               onBlockSender={blockSenderFromAi}
               onUnblockSender={unblockSenderFromAi}
-              plannerActionCount={visiblePlannerActionItems.length}
+              plannerActionCount={baseTasks.length}
               plannerNotice={plannerNotice}
               privacyNotice={privacyControlNotice}
               source={workspaceSource}
@@ -3610,8 +3612,8 @@ function WorkspaceSnapshotPanel({
           <strong>{plannerActionCount}</strong>
           <p>
             {source === "live"
-              ? "AI actions currently loaded back from the latest saved planner run."
-              : "AI planner output stays empty until a real source is connected and synced."}
+              ? "Gmail-style ranked actions currently drive the day, with optional saved AI schedule blocks layered on top."
+              : "Local ranked actions stay in preview until a real source is connected and synced."}
           </p>
         </article>
         <article>

@@ -105,7 +105,7 @@ export async function loadLatestPlannerOutput(
   if (!run) {
     return {
       ok: true,
-      message: "Run the AI planner after syncing Gmail and Calendar to load a saved plan.",
+      message: "Gmail-style local ranking is active. Run the AI planner only if you want saved schedule blocks.",
       actionItems: [],
       scheduleBlocks: [],
     };

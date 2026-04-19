@@ -376,6 +376,7 @@ async function buildDigestWithAiOrFallback(input: any) {
           format: {
             type: "json_schema",
             name: "autopilot_daily_digest",
+            strict: true,
             schema: digestSchema,
           },
         },
@@ -578,6 +579,7 @@ function json(body: unknown, status = 200) {
 
 const digestSchema = {
   type: "object",
+  additionalProperties: false,
   required: ["headline", "brief", "mainThings", "actionItems", "interestEvents"],
   properties: {
     headline: { type: "string" },
@@ -587,13 +589,14 @@ const digestSchema = {
       type: "array",
       items: {
         type: "object",
+        additionalProperties: false,
         required: ["title", "detail", "priority", "sourceMessageId", "sourceUrl"],
         properties: {
           sourceMessageId: { type: ["string", "null"] },
           sourceUrl: { type: ["string", "null"] },
           title: { type: "string" },
           detail: { type: "string" },
-          priority: { type: "string" },
+          priority: { type: "string", enum: ["urgent", "high", "medium", "low"] },
         },
       },
     },
@@ -601,6 +604,7 @@ const digestSchema = {
       type: "array",
       items: {
         type: "object",
+        additionalProperties: false,
         required: ["interest", "title", "summary", "source", "url", "publishedAt"],
         properties: {
           interest: { type: "string" },
